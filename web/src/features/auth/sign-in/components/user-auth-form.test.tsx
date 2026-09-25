@@ -55,7 +55,6 @@ describe('UserAuthForm', () => {
     let emailInput: Locator
     let passwordInput: Locator
     let signInButton: Locator
-    let forgotPasswordLink: Locator
 
     beforeEach(async () => {
       vi.clearAllMocks()
@@ -63,14 +62,16 @@ describe('UserAuthForm', () => {
       emailInput = screen.getByRole('textbox', { name: /^Email$/i })
       passwordInput = screen.getByLabelText(/^Password$/i)
       signInButton = screen.getByRole('button', { name: /^Sign in$/i })
-      forgotPasswordLink = screen.getByText(/^Forgot password\?$/i)
     })
 
-    it('renders fields, submit button, and forgot password link', async () => {
+    // Docu-UI has no email-based password reset, so the form must not offer one.
+    it('renders fields and submit button without a forgot password link', async () => {
       await expect.element(emailInput).toBeInTheDocument()
       await expect.element(passwordInput).toBeInTheDocument()
       await expect.element(signInButton).toBeInTheDocument()
-      await expect.element(forgotPasswordLink).toBeInTheDocument()
+      await expect
+        .element(screen.getByText(/^Forgot password\?$/i))
+        .not.toBeInTheDocument()
     })
 
     it('shows validation messages when submitting empty form', async () => {
