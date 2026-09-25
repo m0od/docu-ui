@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
-import { ArrowLeft, FileCode, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, FileCode, History, TriangleAlert } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,15 +13,21 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { readEnvFile } from './api/env-files-api'
+import { EnvHistory } from './components/env-history'
 import { EnvTextEditor } from './components/env-text-editor'
 import { EnvVariablesEditor } from './components/env-variables-editor'
+
+type ViewMode = 'variables' | 'text' | 'history'
 
 export function EnvFileView() {
   const { name: fileName } = useParams({
     from: '/_authenticated/env-files/$name',
   })
-  const [isTextMode, setIsTextMode] = useState(false)
-  const [isTextWarningOpen, setIsTextWarningOpen] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('variables')
+  // Text and history show every value, so they wait for the user to agree;
+  // 'variables' here means no warning is open.
+  const [modeAwaitingConsent, setModeAwaitingConsent] =
+    useState<ViewMode>('variables')
   const envFile = useQuery({
     queryKey: ['env', 'file', fileName],
     queryFn: () => readEnvFile(fileName),
@@ -68,17 +74,31 @@ export function EnvFileView() {
                 </AlertDescription>
               </Alert>
             )}
-            {isTextMode ? (
+            {viewMode === 'text' && (
               <EnvTextEditor
                 fileName={fileName}
-                onClose={() => setIsTextMode(false)}
+                onClose={() => setViewMode('variables')}
               />
-            ) : (
+            )}
+            {viewMode === 'history' && (
+              <EnvHistory
+                fileName={fileName}
+                onClose={() => setViewMode('variables')}
+              />
+            )}
+            {viewMode === 'variables' && (
               <>
-                <div className='flex justify-end'>
+                <div className='flex justify-end gap-2'>
                   <Button
                     variant='outline'
-                    onClick={() => setIsTextWarningOpen(true)}
+                    onClick={() => setModeAwaitingConsent('history')}
+                  >
+                    <History />
+                    History
+                  </Button>
+                  <Button
+                    variant='outline'
+                    onClick={() => setModeAwaitingConsent('text')}
                   >
                     <FileCode />
                     Edit as text
@@ -96,14 +116,16 @@ export function EnvFileView() {
           </div>
         )}
         <ConfirmDialog
-          open={isTextWarningOpen}
-          onOpenChange={setIsTextWarningOpen}
+          open={modeAwaitingConsent !== 'variables'}
+          onOpenChange={() => setModeAwaitingConsent('variables')}
           title='Show every value?'
-          desc='The text editor shows all values of this file in clear, including passwords. Make sure nobody else can see your screen.'
-          confirmText='Show and edit'
+          desc='This shows all values of this file in clear, including passwords. Make sure nobody else can see your screen.'
+          confirmText={
+            modeAwaitingConsent === 'history' ? 'Show history' : 'Show and edit'
+          }
           handleConfirm={() => {
-            setIsTextWarningOpen(false)
-            setIsTextMode(true)
+            setModeAwaitingConsent('variables')
+            setViewMode(modeAwaitingConsent)
           }}
         />
       </Main>

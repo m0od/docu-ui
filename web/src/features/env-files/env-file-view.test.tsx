@@ -24,6 +24,11 @@ vi.mock('./components/env-text-editor', () => ({
     <button onClick={onClose}>close text editor</button>
   ),
 }))
+vi.mock('./components/env-history', () => ({
+  EnvHistory: ({ onClose }: { onClose: () => void }) => (
+    <button onClick={onClose}>close history</button>
+  ),
+}))
 vi.mock('@/components/layout/header', () => ({
   Header: () => null,
 }))
@@ -76,6 +81,34 @@ describe('EnvFileView', () => {
     await userEvent.click(
       screen.getByRole('button', { name: 'close text editor' })
     )
+    await expect.element(screen.getByText('variables:')).toBeInTheDocument()
+  })
+
+  // Old versions and the diff show secrets too; same warning, and it can be declined.
+  it('warns before showing the history, and can go back', async () => {
+    vi.mocked(readEnvFile).mockResolvedValueOnce({
+      name: 'keycloak.env',
+      version: 'version-1',
+      variables: [],
+      invalidLines: [],
+    })
+    const screen = await render(withQueryClient(<EnvFileView />))
+
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await expect
+      .element(screen.getByRole('alertdialog'))
+      .not.toBeInTheDocument()
+    await expect
+      .element(screen.getByRole('button', { name: 'close history' }))
+      .not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    await expect
+      .element(screen.getByRole('alertdialog'))
+      .toHaveTextContent('including passwords')
+    await userEvent.click(screen.getByRole('button', { name: 'Show history' }))
+    await userEvent.click(screen.getByRole('button', { name: 'close history' }))
     await expect.element(screen.getByText('variables:')).toBeInTheDocument()
   })
 
