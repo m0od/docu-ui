@@ -58,6 +58,9 @@ func TestEnvRoutesRequireSession(tester *testing.T) {
 		{http.MethodGet, "/api/env-files"},
 		{http.MethodGet, "/api/env-files/keycloak.env"},
 		{http.MethodGet, "/api/env-files/keycloak.env/variables/KC_DB"},
+		{http.MethodPatch, "/api/env-files/keycloak.env/variables"},
+		{http.MethodGet, "/api/env-files/keycloak.env/content"},
+		{http.MethodPut, "/api/env-files/keycloak.env/content"},
 	}
 	for _, route := range routes {
 		if response := sendJSON(handler, route[0], route[1], envFolderBody("/tmp")); response.Code != http.StatusUnauthorized {
@@ -72,8 +75,17 @@ func TestEnvFilesAskForFolderFirst(tester *testing.T) {
 	if folder := sendJSON(handler, http.MethodGet, "/api/settings/env-folder", "", sessionCookie); responseField(tester, folder, "folder") != "" {
 		tester.Fatalf("folder: %s", folder.Body.String())
 	}
-	for _, target := range []string{"/api/env-files", "/api/env-files/a.env", "/api/env-files/a.env/variables/KEY"} {
-		response := sendJSON(handler, http.MethodGet, target, "", sessionCookie)
+	routes := [][2]string{
+		{http.MethodGet, "/api/env-files"},
+		{http.MethodGet, "/api/env-files/a.env"},
+		{http.MethodGet, "/api/env-files/a.env/variables/KEY"},
+		{http.MethodPatch, "/api/env-files/a.env/variables"},
+		{http.MethodGet, "/api/env-files/a.env/content"},
+		{http.MethodPut, "/api/env-files/a.env/content"},
+	}
+	for _, route := range routes {
+		method, target := route[0], route[1]
+		response := sendJSON(handler, method, target, "{}", sessionCookie)
 		if response.Code != http.StatusConflict || responseField(tester, response, "error") != folderNotSet {
 			tester.Errorf("%s: %d %s", target, response.Code, response.Body.String())
 		}

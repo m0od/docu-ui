@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  changeEnvVariables,
   fetchEnvFolder,
+  readEnvContent,
+  saveEnvContent,
   listEnvFiles,
   readEnvFile,
   revealEnvValue,
@@ -40,7 +43,12 @@ describe('env-files-api', () => {
   })
 
   it('reads one file', async () => {
-    const envFile = { name: 'a.env', variables: [], invalidLines: [] }
+    const envFile = {
+      name: 'a.env',
+      version: 'v1',
+      variables: [],
+      invalidLines: [],
+    }
     const fetchSpy = mockFetch(envFile)
 
     await expect(readEnvFile('a.env')).resolves.toEqual(envFile)
@@ -56,6 +64,38 @@ describe('env-files-api', () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       'api/env-files/a%20b.env/variables/KEY%2F..%2F%3Fx',
       undefined
+    )
+  })
+
+  it('sends variable changes with the version they were made on', async () => {
+    const fetchSpy = mockFetch({ version: 'v2' })
+
+    await changeEnvVariables('a.env', 'v1', [{ key: 'A', value: null }])
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'api/env-files/a.env/variables',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: '{"baseVersion":"v1","changes":[{"key":"A","value":null}]}',
+      })
+    )
+  })
+
+  it('reads and saves the whole file', async () => {
+    mockFetch({ content: 'A=1\n', version: 'v1' })
+    await expect(readEnvContent('a.env')).resolves.toEqual({
+      content: 'A=1\n',
+      version: 'v1',
+    })
+
+    const fetchSpy = mockFetch({ version: 'v2' })
+    await saveEnvContent('a.env', 'v1', 'A=2\n')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'api/env-files/a.env/content',
+      expect.objectContaining({
+        method: 'PUT',
+        body: '{"baseVersion":"v1","content":"A=2\\n"}',
+      })
     )
   })
 })

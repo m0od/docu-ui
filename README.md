@@ -51,6 +51,22 @@ Mount a parent folder (e.g. `/opt/textiq:/host`) if you want to switch between s
 Only plain `name.env` files directly in that folder are listed; symlinks pointing outside it are refused.
 Values are masked; each one is loaded only when you click to show it, and that is logged (user, file, key — never the value).
 
+### Editing
+
+Change variables one by one (other values stay masked), or switch to **Edit as text** for bigger edits (shows every value).
+Both show the changes before saving. If someone saved the same file in the meantime, the save is refused and you reload.
+
+Before each save, the previous content is kept in `<folder>/.history/<file>/<time>_<user>.env` (newest 50 per file).
+The file is rewritten in place, so its owner and mode stay as they are.
+
+Docu-UI runs as user `65532` inside the image, so it needs write access to the folder (for `.history`) and to the files, e.g.:
+
+```sh
+sudo chown -R 65532:65532 /opt/textiq/env    # or: docker run --user <uid of the owner> ...
+```
+
+Without it, saving fails with `permission denied` and the file is left untouched.
+
 `GET /healthz` returns `ok` for load balancer and container health checks.
 
 ## License
