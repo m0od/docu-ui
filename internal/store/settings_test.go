@@ -43,6 +43,12 @@ func TestSettingsFailAfterClose(tester *testing.T) {
 	if err := testStore.SetDocoCD(ctx, DocoCD{}); err == nil {
 		tester.Error("SetDocoCD should fail")
 	}
+	if _, err := testStore.Webhook(ctx); err == nil {
+		tester.Error("Webhook should fail")
+	}
+	if err := testStore.SetWebhook(ctx, Webhook{}); err == nil {
+		tester.Error("SetWebhook should fail")
+	}
 }
 
 // Saving new Doco-CD settings replaces both fields, including a key cleared on purpose.
@@ -58,6 +64,26 @@ func TestDocoCDSettings(tester *testing.T) {
 		}
 		if saved, err := testStore.DocoCD(ctx); err != nil || saved != settings {
 			tester.Fatalf("got %+v, %v, want %+v", saved, err, settings)
+		}
+	}
+}
+
+// Every field round-trips, and saving again replaces all of them (a cleared header stays cleared).
+func TestWebhookSettings(tester *testing.T) {
+	testStore := openTestStore(tester)
+	ctx := context.Background()
+	if webhook, err := testStore.Webhook(ctx); err != nil || webhook != (Webhook{}) {
+		tester.Fatalf("fresh install: %+v, %v", webhook, err)
+	}
+	for _, webhook := range []Webhook{
+		{URL: "https://ci/hook", Secret: "s1", HeaderName: "Authorization", HeaderValue: "Bearer t"},
+		{URL: "https://other/hook", Secret: "s2"},
+	} {
+		if err := testStore.SetWebhook(ctx, webhook); err != nil {
+			tester.Fatal(err)
+		}
+		if saved, err := testStore.Webhook(ctx); err != nil || saved != webhook {
+			tester.Fatalf("got %+v, %v, want %+v", saved, err, webhook)
 		}
 	}
 }

@@ -73,7 +73,11 @@ Without it, saving fails with `permission denied` and the file is left untouched
 ### Applying
 
 Saving only changes the file; running containers keep the old values until they are recreated.
-Docu-UI asks [Doco-CD](https://doco.cd) to do it through its REST API (`POST /v1/api/project/{project}/recreate?service=...`),
+Each file picks how that happens: **Doco-CD** recreates the services, or a **webhook** hands the job to your own CI/CD.
+
+#### Doco-CD
+
+Docu-UI asks [Doco-CD](https://doco.cd) to recreate the services through its REST API (`POST /v1/api/project/{project}/recreate?service=...`),
 which reloads the Compose project, so the new `env_file` values reach the containers.
 
 1. Enable the Doco-CD API by setting `API_SECRET` (or `API_SECRET_FILE`) on the Doco-CD container.
@@ -81,7 +85,36 @@ which reloads the Compose project, so the new `env_file` values reach the contai
    The secret is stored in `/data/docu-ui.db` and never sent back to the browser.
 3. On a file's page, say which Compose project and services use it (no services: the whole project).
 
-After a save the page shows **Saved, not applied yet** with an **Apply** button. If recreating fails, Doco-CD's reason is shown and the file stays marked as not applied.
+#### Webhook
+
+Set a **shared webhook** once on the **Env files** page; a file can also have **its own webhook**, which then replaces the shared one entirely (URL, secret and header).
+On Apply, Docu-UI sends a `POST` with this JSON body. It never contains env values, only which file changed:
+
+```json
+{
+  "event_type": "docu-ui.apply",
+  "client_payload": {
+    "file": "keycloak.env",
+    "version": "<version the user applied>",
+    "project": "textiq-dev",
+    "services": ["keycloak"],
+    "user": "admin",
+    "sentAt": "2026-09-25T10:00:00Z"
+  }
+}
+```
+
+The shape is what GitHub's [`repository_dispatch`](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event) expects,
+so `https://api.github.com/repos/<owner>/<repo>/dispatches` works as the URL with header `Authorization` = `Bearer <token>`.
+Any 2xx answer counts as applied; otherwise the status and the start of the answer are shown.
+
+- **Signing secret** (optional): Docu-UI adds `X-Docu-UI-Signature: sha256=<hex>`, the HMAC-SHA256 of the raw body with the secret.
+  Check it on the receiver before trusting the request, e.g. `printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$SECRET"`, and compare in constant time.
+- **Header** (optional): one extra header, e.g. a token the receiver or a gateway checks.
+
+Secrets and header values are stored in `/data/docu-ui.db` and never sent back to the browser; leave a field empty to keep the saved one.
+
+After a save the page shows **Saved, not applied yet** with an **Apply** button. If applying fails, the reason is shown and the file stays marked as not applied.
 
 `GET /healthz` returns `ok` for load balancer and container health checks.
 

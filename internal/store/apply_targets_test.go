@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"testing/fstest"
 )
 
 func TestApplyTargetMissing(tester *testing.T) {
@@ -18,9 +19,10 @@ func TestSetApplyTargetReplacesPrevious(tester *testing.T) {
 	testStore := openTestStore(tester)
 	ctx := context.Background()
 	targets := []ApplyTarget{
-		{Project: "textiq-dev", Services: []string{"keycloak", "iam"}, AppliedVersion: "v1"},
+		{Adapter: AdapterDocoCD, Project: "textiq-dev", Services: []string{"keycloak", "iam"}, AppliedVersion: "v1"},
 		// No services means the whole project; it must come back as [], not nil, for the JSON API.
-		{Project: "textiq-dev", Services: []string{}, AppliedVersion: "v2"},
+		{Adapter: AdapterWebhook, Project: "textiq-dev", Services: []string{}, AppliedVersion: "v2",
+			Webhook: Webhook{URL: "https://ci/hook", Secret: "s", HeaderName: "Authorization", HeaderValue: "Bearer t"}},
 	}
 	for _, target := range targets {
 		if err := testStore.SetApplyTarget(ctx, "keycloak.env", target); err != nil {
@@ -42,5 +44,31 @@ func TestApplyTargetsFailAfterClose(tester *testing.T) {
 	}
 	if err := testStore.SetApplyTarget(ctx, "a.env", ApplyTarget{}); err == nil {
 		tester.Error("SetApplyTarget should fail")
+	}
+}
+
+// Targets saved before webhooks existed were all Doco-CD; upgrading must keep them working that way.
+func TestUpgradeKeepsExistingTargetsOnDocoCD(tester *testing.T) {
+	database := openRawDatabase(tester)
+	releaseBeforeWebhooks := fstest.MapFS{}
+	for _, fileName := range []string{"0001_accounts.sql", "0002_sign_in.sql", "0003_settings.sql", "0004_apply_targets.sql"} {
+		content, err := migrationFiles.ReadFile("migrations/" + fileName)
+		if err != nil {
+			tester.Fatal(err)
+		}
+		releaseBeforeWebhooks["migrations/"+fileName] = &fstest.MapFile{Data: content}
+	}
+	if err := migrate(database, releaseBeforeWebhooks); err != nil {
+		tester.Fatal(err)
+	}
+	if _, err := database.Exec(`INSERT INTO apply_targets VALUES ('a.env', 'textiq-dev', 'keycloak', 'v1')`); err != nil {
+		tester.Fatal(err)
+	}
+	if err := migrate(database, migrationFiles); err != nil {
+		tester.Fatal(err)
+	}
+	target, err := (&Store{database: database}).ApplyTarget(context.Background(), "a.env")
+	if err != nil || target.Adapter != AdapterDocoCD || target.Project != "textiq-dev" || target.Webhook != (Webhook{}) {
+		tester.Fatalf("got %+v, %v", target, err)
 	}
 }
