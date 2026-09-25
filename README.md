@@ -37,6 +37,20 @@ docker logs docu-ui 2>&1 | grep setup_token
 Open the UI, enter the token, and create the admin account. Two-factor (TOTP) is optional on that page.
 The setup page closes for good once the first account exists; a new token is printed on each restart until then.
 
+## Env files
+
+After signing in, open **Env files** and enter the folder that holds your `*.env` files.
+The folder is saved in the database and applies at once — no env var, no restart.
+It is a path **inside the container**, so mount the host folder first:
+
+```sh
+docker run -v /opt/textiq/env:/host/env -v docu-data:/data ... docu-ui
+```
+
+Mount a parent folder (e.g. `/opt/textiq:/host`) if you want to switch between sub-folders from the UI later.
+Only plain `name.env` files directly in that folder are listed; symlinks pointing outside it are refused.
+Values are masked; each one is loaded only when you click to show it, and that is logged (user, file, key — never the value).
+
 `GET /healthz` returns `ok` for load balancer and container health checks.
 
 ## License

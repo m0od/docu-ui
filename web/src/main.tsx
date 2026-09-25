@@ -9,6 +9,7 @@ import {
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { ApiError } from '@/lib/api-client'
 import { handleServerError } from '@/lib/handle-server-error'
 import { DirectionProvider } from './context/direction-provider'
 import { FontProvider } from './context/font-provider'
@@ -27,6 +28,9 @@ const queryClient = new QueryClient({
 
         if (failureCount >= 0 && import.meta.env.DEV) return false
         if (failureCount > 3 && import.meta.env.PROD) return false
+
+        // A 4xx from our API will not change on retry (bad name, no folder, no session).
+        if (error instanceof ApiError && error.status < 500) return false
 
         return !(
           error instanceof AxiosError &&
@@ -50,6 +54,12 @@ const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error) => {
+      // The session expired or was signed out elsewhere: back to sign-in, then return here.
+      if (error instanceof ApiError && error.status === 401) {
+        useAuthStore.getState().auth.reset()
+        const redirect = `${router.history.location.href}`
+        router.navigate({ to: '/sign-in', search: { redirect } })
+      }
       if (error instanceof AxiosError) {
         if (error.response?.status === 401) {
           toast.error('Session expired!')
