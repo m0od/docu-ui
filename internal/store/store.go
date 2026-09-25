@@ -12,25 +12,16 @@ import (
 // ErrSetupDone means an account already exists, so first-run setup is closed.
 var ErrSetupDone = errors.New("setup already completed")
 
-const schema = `
-CREATE TABLE IF NOT EXISTS accounts (
-	id            INTEGER PRIMARY KEY,
-	username      TEXT NOT NULL UNIQUE,
-	password_hash TEXT NOT NULL,
-	totp_secret   TEXT NOT NULL DEFAULT '', -- empty = TOTP not enabled
-	created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
-);`
-
 // Store is the database handle.
 type Store struct {
 	database *sql.DB
 }
 
-// Open opens (creating if needed) the SQLite file at databasePath and applies the schema.
+// Open opens (creating if needed) the SQLite file at databasePath and brings its schema up to date.
 func Open(databasePath string) (*Store, error) {
 	// sql.Open only fails for an unregistered driver name; the import above registers "sqlite".
 	database, _ := sql.Open("sqlite", "file:"+databasePath+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
-	if _, err := database.Exec(schema); err != nil {
+	if err := migrate(database, migrationFiles); err != nil {
 		database.Close()
 		return nil, err
 	}
