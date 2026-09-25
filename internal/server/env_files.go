@@ -28,6 +28,9 @@ func (handlers envFileHandlers) register(routes *http.ServeMux) {
 	routes.Handle("PATCH /api/env-files/{name}/variables", handlers.requireSession(handlers.changeVariables))
 	routes.Handle("GET /api/env-files/{name}/content", handlers.requireSession(handlers.readContent))
 	routes.Handle("PUT /api/env-files/{name}/content", handlers.requireSession(handlers.writeContent))
+	routes.Handle("GET /api/env-files/{name}/history", handlers.requireSession(handlers.listHistory))
+	routes.Handle("GET /api/env-files/{name}/history/{id}", handlers.requireSession(handlers.readHistory))
+	routes.Handle("POST /api/env-files/{name}/history/{id}/restore", handlers.requireSession(handlers.restoreHistory))
 }
 
 func (handlers envFileHandlers) envFolder(writer http.ResponseWriter, request *http.Request, _ string) {
@@ -167,6 +170,63 @@ func (handlers envFileHandlers) changeVariables(writer http.ResponseWriter, requ
 	writeJSON(writer, http.StatusOK, map[string]string{"version": version})
 }
 
+func (handlers envFileHandlers) listHistory(writer http.ResponseWriter, request *http.Request, _ string) {
+	folder, ok := handlers.folder(writer, request)
+	if !ok {
+		return
+	}
+	entries, err := envfiles.History(folder, request.PathValue("name"))
+	if err != nil {
+		writeEnvFileError(writer, err, cannotRead)
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"entries": entries})
+}
+
+// readHistory returns one old version, every value in clear, for the diff view.
+func (handlers envFileHandlers) readHistory(writer http.ResponseWriter, request *http.Request, username string) {
+	folder, ok := handlers.folder(writer, request)
+	if !ok {
+		return
+	}
+	fileName, entryID := request.PathValue("name"), request.PathValue("id")
+	content, err := envfiles.HistoryContent(folder, fileName, entryID)
+	if err != nil {
+		writeEnvFileError(writer, err, cannotRead)
+		return
+	}
+	slog.Info("env file history opened", "user", username, "file", fileName, "version", entryID)
+	writeJSON(writer, http.StatusOK, map[string]string{"content": content})
+}
+
+// restoreHistory writes an old version back. The content is read here, not sent by the browser,
+// so the audit line names exactly what was restored. The restore itself is backed up like any save.
+func (handlers envFileHandlers) restoreHistory(writer http.ResponseWriter, request *http.Request, username string) {
+	var restoreInput struct {
+		BaseVersion string `json:"baseVersion"`
+	}
+	if !decodeJSON(writer, request, &restoreInput) {
+		return
+	}
+	folder, ok := handlers.folder(writer, request)
+	if !ok {
+		return
+	}
+	fileName, entryID := request.PathValue("name"), request.PathValue("id")
+	content, err := envfiles.HistoryContent(folder, fileName, entryID)
+	if err != nil {
+		writeEnvFileError(writer, err, cannotRead)
+		return
+	}
+	version, err := envfiles.WriteContent(folder, fileName, restoreInput.BaseVersion, username, content)
+	if err != nil {
+		writeEnvFileError(writer, err, cannotSave)
+		return
+	}
+	slog.Info("env file restored", "user", username, "file", fileName, "version", entryID)
+	writeJSON(writer, http.StatusOK, map[string]string{"version": version})
+}
+
 // folder returns the saved env folder, or answers 409/500 and returns false.
 func (handlers envFileHandlers) folder(writer http.ResponseWriter, request *http.Request) (string, bool) {
 	folder, err := handlers.store.EnvFolder(request.Context())
@@ -187,7 +247,8 @@ func writeEnvFileError(writer http.ResponseWriter, err error, failureMessage str
 	switch {
 	case errors.Is(err, envfiles.ErrInvalidName), errors.Is(err, envfiles.ErrInvalidKey), errors.Is(err, envfiles.ErrInvalidValue):
 		writeError(writer, http.StatusBadRequest, err.Error())
-	case errors.Is(err, envfiles.ErrFileNotFound), errors.Is(err, envfiles.ErrVariableNotFound):
+	case errors.Is(err, envfiles.ErrFileNotFound), errors.Is(err, envfiles.ErrVariableNotFound),
+		errors.Is(err, envfiles.ErrHistoryNotFound):
 		writeError(writer, http.StatusNotFound, err.Error())
 	case errors.Is(err, envfiles.ErrConflict):
 		writeError(writer, http.StatusConflict, err.Error())

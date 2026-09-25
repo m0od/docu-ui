@@ -1,6 +1,6 @@
 // Calls to the env files API. Values are never part of a file listing;
 // each one is fetched on its own when the user clicks to reveal it.
-import { requestJson, sendJson } from '@/lib/api-client'
+import { postJson, requestJson, sendJson } from '@/lib/api-client'
 
 export type EnvVariable = {
   key: string
@@ -82,4 +82,39 @@ export async function saveEnvContent(
     baseVersion,
     content,
   })
+}
+
+// An entry holds the file as it was just before savedBy saved it at savedAt.
+type EnvHistoryEntry = { id: string; savedAt: string; savedBy: string }
+
+// listEnvHistory returns the kept versions, newest first. No values.
+export async function listEnvHistory(
+  fileName: string
+): Promise<EnvHistoryEntry[]> {
+  const history = await requestJson<{ entries: EnvHistoryEntry[] }>(
+    envFileUrl(fileName, 'history')
+  )
+  return history.entries
+}
+
+// readEnvHistory returns one kept version with every value in clear.
+export async function readEnvHistory(
+  fileName: string,
+  entryId: string
+): Promise<string> {
+  const entry = await requestJson<{ content: string }>(
+    envFileUrl(fileName, `history/${encodeURIComponent(entryId)}`)
+  )
+  return entry.content
+}
+
+export async function restoreEnvHistory(
+  fileName: string,
+  entryId: string,
+  baseVersion: string
+): Promise<void> {
+  await postJson(
+    envFileUrl(fileName, `history/${encodeURIComponent(entryId)}/restore`),
+    { baseVersion }
+  )
 }

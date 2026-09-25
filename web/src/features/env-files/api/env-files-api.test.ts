@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   changeEnvVariables,
   fetchEnvFolder,
+  listEnvHistory,
+  readEnvHistory,
+  restoreEnvHistory,
   readEnvContent,
   saveEnvContent,
   listEnvFiles,
@@ -96,6 +99,38 @@ describe('env-files-api', () => {
         method: 'PUT',
         body: '{"baseVersion":"v1","content":"A=2\\n"}',
       })
+    )
+  })
+
+  it('lists the history of a file', async () => {
+    const entry = {
+      id: 'e1',
+      savedAt: '2026-09-25T08:00:00Z',
+      savedBy: 'admin',
+    }
+    const fetchSpy = mockFetch({ entries: [entry] })
+
+    await expect(listEnvHistory('a.env')).resolves.toEqual([entry])
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'api/env-files/a.env/history',
+      undefined
+    )
+  })
+
+  // The entry id comes from the server, but is still escaped like any path part.
+  it('reads and restores one history entry', async () => {
+    const fetchSpy = mockFetch({ content: 'A=1\n' })
+    await expect(readEnvHistory('a.env', 'e 1')).resolves.toBe('A=1\n')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'api/env-files/a.env/history/e%201',
+      undefined
+    )
+
+    const restoreSpy = mockFetch({ version: 'v2' })
+    await restoreEnvHistory('a.env', 'e 1', 'v1')
+    expect(restoreSpy).toHaveBeenCalledWith(
+      'api/env-files/a.env/history/e%201/restore',
+      expect.objectContaining({ method: 'POST', body: '{"baseVersion":"v1"}' })
     )
   })
 })
