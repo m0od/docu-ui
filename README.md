@@ -24,6 +24,7 @@ make image   # docker build
 | `DOCU_BASE_PATH` | *(empty)* | Sub-path when served behind a gateway, e.g. `/docu-ui` |
 | `DOCU_DATA_DIR` | `/data` | Where the SQLite database (`docu-ui.db`) lives; mount a volume here |
 | `DOCU_TLS_CERT` / `DOCU_TLS_KEY` | *(empty)* | PEM cert and key to serve HTTPS directly (standalone). Leave empty behind a TLS-terminating gateway |
+| `DOCU_INSECURE_COOKIE` | `false` | `true` drops the Secure flag from the session cookie so sign-in works over plain HTTP. Trusted networks only |
 
 ## First run
 
