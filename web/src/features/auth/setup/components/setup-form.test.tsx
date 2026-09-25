@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, type RenderResult } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
-import { createFirstAccount, fetchTotpSecret } from '@/lib/setup-api'
+import {
+  createFirstAccount,
+  fetchTotpSecret,
+} from '@/features/auth/setup/api/setup-api'
 import { SetupForm } from './setup-form'
 
 const navigate = vi.fn()
@@ -11,8 +14,9 @@ vi.mock('@tanstack/react-router', async (original) => {
   return { ...actual, useNavigate: () => navigate }
 })
 
-vi.mock('@/lib/setup-api', async (original) => {
-  const actual = await original<typeof import('@/lib/setup-api')>()
+vi.mock('@/features/auth/setup/api/setup-api', async (original) => {
+  const actual =
+    await original<typeof import('@/features/auth/setup/api/setup-api')>()
   return {
     ...actual,
     createFirstAccount: vi.fn(),

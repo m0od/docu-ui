@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
-import { isSetupRequired } from '@/lib/setup-api'
-import { Setup } from '@/features/setup'
+import { Setup } from '@/features/auth/setup'
+import { isSetupRequired } from '@/features/auth/setup/api/setup-api'
 
 export const Route = createFileRoute('/(auth)/setup')({
   // Once the admin exists, the setup page is gone for good.

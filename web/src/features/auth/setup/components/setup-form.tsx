@@ -6,11 +6,6 @@ import { useNavigate } from '@tanstack/react-router'
 import { Loader2, ShieldCheck } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
-import {
-  createFirstAccount,
-  fetchTotpSecret,
-  otpauthUri,
-} from '@/lib/setup-api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -31,6 +26,11 @@ import {
 } from '@/components/ui/input-otp'
 import { Switch } from '@/components/ui/switch'
 import { PasswordInput } from '@/components/password-input'
+import {
+  createFirstAccount,
+  fetchTotpSecret,
+  otpauthUri,
+} from '@/features/auth/setup/api/setup-api'
 
 // Same limits as the server (internal/server/setup.go), so most mistakes are caught before submitting.
 const formSchema = z

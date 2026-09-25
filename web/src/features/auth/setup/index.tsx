@@ -5,7 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { AuthLayout } from '@/features/auth/auth-layout'
+import { AuthLayout } from '../auth-layout'
 import { SetupForm } from './components/setup-form'
 
 export function Setup() {
