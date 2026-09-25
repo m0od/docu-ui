@@ -1,19 +1,23 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
+	"time"
 
 	"github.com/m0od/docu-ui/internal/dococd"
 	"github.com/m0od/docu-ui/internal/envfiles"
 	"github.com/m0od/docu-ui/internal/store"
+	"github.com/m0od/docu-ui/internal/webhook"
 )
 
 const (
 	docoCDNotSet   = "set up Doco-CD first"
+	webhookNotSet  = "set up the shared webhook first, or give this file its own"
 	targetNotSet   = "choose where to apply this file first"
 	cannotSettings = "cannot read settings"
 )
@@ -42,8 +46,7 @@ func (handlers envFileHandlers) setDocoCD(writer http.ResponseWriter, request *h
 	if !decodeJSON(writer, request, &settingsInput) {
 		return
 	}
-	parsedURL, err := url.Parse(settingsInput.URL)
-	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
+	if !isHTTPURL(settingsInput.URL) {
 		writeError(writer, http.StatusBadRequest, "the Doco-CD URL must look like http://doco-cd:80")
 		return
 	}
@@ -80,13 +83,22 @@ func (handlers envFileHandlers) applyTarget(writer http.ResponseWriter, request 
 
 func (handlers envFileHandlers) setApplyTarget(writer http.ResponseWriter, request *http.Request, username string) {
 	var targetInput struct {
+		Adapter  string   `json:"adapter"`
 		Project  string   `json:"project"`
 		Services []string `json:"services"`
+		// Only for the webhook adapter; an empty URL means the shared webhook.
+		Webhook webhookInput `json:"webhook"`
 	}
 	if !decodeJSON(writer, request, &targetInput) {
 		return
 	}
-	if !projectPattern.MatchString(targetInput.Project) {
+	if targetInput.Adapter != store.AdapterDocoCD && targetInput.Adapter != store.AdapterWebhook {
+		writeError(writer, http.StatusBadRequest, "adapter must be doco-cd or webhook")
+		return
+	}
+	// A webhook receiver may not care about Compose names; Doco-CD needs the project.
+	isOptionalProject := targetInput.Adapter == store.AdapterWebhook && targetInput.Project == ""
+	if !isOptionalProject && !projectPattern.MatchString(targetInput.Project) {
 		writeError(writer, http.StatusBadRequest, "the project name must be lowercase letters, digits, - or _")
 		return
 	}
@@ -114,13 +126,25 @@ func (handlers envFileHandlers) setApplyTarget(writer http.ResponseWriter, reque
 		writeError(writer, http.StatusInternalServerError, cannotSettings)
 		return
 	}
+	ownWebhook := store.Webhook{} // Doco-CD, or the shared webhook: keep no secrets for this file
+	if targetInput.Adapter == store.AdapterWebhook && targetInput.Webhook.URL != "" {
+		var problem string
+		// An empty secret field keeps the one saved for this file.
+		if ownWebhook, problem = targetInput.Webhook.merge(target.Webhook); problem != "" {
+			writeError(writer, http.StatusBadRequest, problem)
+			return
+		}
+	}
+	target.Adapter = targetInput.Adapter
 	target.Project = targetInput.Project
 	target.Services = append([]string{}, targetInput.Services...)
+	target.Webhook = ownWebhook
 	if err := handlers.store.SetApplyTarget(request.Context(), fileName, target); err != nil {
 		writeError(writer, http.StatusInternalServerError, "cannot save settings")
 		return
 	}
-	slog.Info("apply target changed", "user", username, "file", fileName, "project", target.Project, "services", target.Services)
+	slog.Info("apply target changed", "user", username, "file", fileName, "adapter", target.Adapter,
+		"project", target.Project, "services", target.Services, "own_webhook", target.Webhook.URL)
 	writeApplyTarget(writer, target)
 }
 
@@ -156,25 +180,14 @@ func (handlers envFileHandlers) apply(writer http.ResponseWriter, request *http.
 		writeError(writer, http.StatusInternalServerError, cannotSettings)
 		return
 	}
-	settings, err := handlers.store.DocoCD(request.Context())
-	if err != nil {
-		writeError(writer, http.StatusInternalServerError, cannotSettings)
+	delivery := webhook.Delivery{
+		File: fileName, Version: applyInput.Version, Project: target.Project, Services: target.Services,
+		User: username, SentAt: time.Now().UTC(),
+	}
+	if statusCode, err := handlers.runAdapter(request.Context(), target, delivery); err != nil {
+		slog.Error("apply failed", "user", username, "file", fileName, "adapter", target.Adapter, "err", err)
+		writeError(writer, statusCode, err.Error())
 		return
-	}
-	if settings.URL == "" {
-		writeError(writer, http.StatusConflict, docoCDNotSet)
-		return
-	}
-	services := target.Services
-	if len(services) == 0 {
-		services = []string{""} // one call for the whole project
-	}
-	for _, service := range services {
-		if err := dococd.Recreate(request.Context(), settings.URL, settings.APIKey, target.Project, service); err != nil {
-			slog.Error("apply failed", "user", username, "file", fileName, "project", target.Project, "service", service, "err", err)
-			writeError(writer, http.StatusBadGateway, err.Error())
-			return
-		}
 	}
 	// If the file was saved again during the recreate, the containers may run a newer version than
 	// the one recorded here; the page then still says "not applied", which is the safe mistake.
@@ -183,13 +196,61 @@ func (handlers envFileHandlers) apply(writer http.ResponseWriter, request *http.
 		writeError(writer, http.StatusInternalServerError, "applied, but cannot record it")
 		return
 	}
-	slog.Info("env file applied", "user", username, "file", fileName, "project", target.Project, "services", target.Services)
+	slog.Info("env file applied", "user", username, "file", fileName, "adapter", target.Adapter, "project", target.Project, "services", target.Services)
 	writeApplyTarget(writer, target)
+}
+
+// runAdapter applies target; on failure it returns the HTTP status to answer with.
+func (handlers envFileHandlers) runAdapter(ctx context.Context, target store.ApplyTarget, delivery webhook.Delivery) (int, error) {
+	if target.Adapter == store.AdapterWebhook {
+		// store.Webhook and webhook.Endpoint have the same fields, so they convert directly.
+		endpoint := webhook.Endpoint(target.Webhook)
+		if endpoint.URL == "" {
+			shared, err := handlers.store.Webhook(ctx)
+			if err != nil {
+				return http.StatusInternalServerError, errors.New(cannotSettings)
+			}
+			endpoint = webhook.Endpoint(shared)
+		}
+		if endpoint.URL == "" {
+			return http.StatusConflict, errors.New(webhookNotSet)
+		}
+		if err := webhook.Send(ctx, endpoint, delivery); err != nil {
+			return http.StatusBadGateway, err
+		}
+		return 0, nil
+	}
+	settings, err := handlers.store.DocoCD(ctx)
+	if err != nil {
+		return http.StatusInternalServerError, errors.New(cannotSettings)
+	}
+	if settings.URL == "" {
+		return http.StatusConflict, errors.New(docoCDNotSet)
+	}
+	services := target.Services
+	if len(services) == 0 {
+		services = []string{""} // one call for the whole project
+	}
+	for _, service := range services {
+		if err := dococd.Recreate(ctx, settings.URL, settings.APIKey, target.Project, service); err != nil {
+			return http.StatusBadGateway, err
+		}
+	}
+	return 0, nil
+}
+
+// isHTTPURL accepts absolute http(s) URLs, the only ones the adapters can call.
+func isHTTPURL(rawURL string) bool {
+	parsedURL, err := url.Parse(rawURL)
+	return err == nil && (parsedURL.Scheme == "http" || parsedURL.Scheme == "https") && parsedURL.Host != ""
 }
 
 func writeApplyTarget(writer http.ResponseWriter, target store.ApplyTarget) {
 	writeJSON(writer, http.StatusOK, map[string]any{
-		"target":         map[string]any{"project": target.Project, "services": target.Services},
+		"target": map[string]any{
+			"adapter": target.Adapter, "project": target.Project, "services": target.Services,
+			"webhook": webhookView(target.Webhook),
+		},
 		"appliedVersion": target.AppliedVersion,
 	})
 }

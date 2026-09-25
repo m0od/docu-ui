@@ -3,8 +3,10 @@ import {
   applyEnvFile,
   fetchApplyState,
   fetchDocoCD,
+  fetchSharedWebhook,
   saveApplyTarget,
   saveDocoCD,
+  saveSharedWebhook,
 } from './apply-api'
 
 function mockFetch(responseBody: unknown) {
@@ -34,10 +36,46 @@ describe('apply-api', () => {
     )
   })
 
+  it('reads and saves the shared webhook', async () => {
+    const view = {
+      url: 'https://ci.example/hook',
+      hasSecret: true,
+      headerName: '',
+      hasHeaderValue: false,
+    }
+    mockFetch(view)
+    await expect(fetchSharedWebhook()).resolves.toEqual(view)
+
+    const fetchSpy = mockFetch(view)
+    await saveSharedWebhook({
+      url: 'https://ci.example/hook',
+      secret: 's',
+      headerName: '',
+      headerValue: '',
+    })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'api/settings/webhook',
+      expect.objectContaining({
+        method: 'PUT',
+        body: '{"url":"https://ci.example/hook","secret":"s","headerName":"","headerValue":""}',
+      })
+    )
+  })
+
   // File names come from the file system; escape them like every other file URL.
   it('reads, saves and applies the target of a file', async () => {
     const applyState = {
-      target: { project: 'p', services: ['s'] },
+      target: {
+        adapter: 'doco-cd',
+        project: 'p',
+        services: ['s'],
+        webhook: {
+          url: '',
+          hasSecret: false,
+          headerName: '',
+          hasHeaderValue: false,
+        },
+      },
       appliedVersion: 'v1',
     }
     const readSpy = mockFetch(applyState)
@@ -48,12 +86,18 @@ describe('apply-api', () => {
     )
 
     const saveSpy = mockFetch(applyState)
-    await saveApplyTarget('a.env', { project: 'p', services: ['s'] })
+    const noWebhook = { url: '', secret: '', headerName: '', headerValue: '' }
+    await saveApplyTarget('a.env', {
+      adapter: 'webhook',
+      project: '',
+      services: [],
+      webhook: noWebhook,
+    })
     expect(saveSpy).toHaveBeenCalledWith(
       'api/env-files/a.env/apply-target',
       expect.objectContaining({
         method: 'PUT',
-        body: '{"project":"p","services":["s"]}',
+        body: '{"adapter":"webhook","project":"","services":[],"webhook":{"url":"","secret":"","headerName":"","headerValue":""}}',
       })
     )
 

@@ -33,6 +33,8 @@ func (handlers envFileHandlers) register(routes *http.ServeMux) {
 	routes.Handle("POST /api/env-files/{name}/history/{id}/restore", handlers.requireSession(handlers.restoreHistory))
 	routes.Handle("GET /api/settings/doco-cd", handlers.requireSession(handlers.docoCD))
 	routes.Handle("PUT /api/settings/doco-cd", handlers.requireSession(handlers.setDocoCD))
+	routes.Handle("GET /api/settings/webhook", handlers.requireSession(handlers.sharedWebhook))
+	routes.Handle("PUT /api/settings/webhook", handlers.requireSession(handlers.setSharedWebhook))
 	routes.Handle("GET /api/env-files/{name}/apply-target", handlers.requireSession(handlers.applyTarget))
 	routes.Handle("PUT /api/env-files/{name}/apply-target", handlers.requireSession(handlers.setApplyTarget))
 	routes.Handle("POST /api/env-files/{name}/apply", handlers.requireSession(handlers.apply))

@@ -24,6 +24,20 @@ func (failing failingStore) SetDocoCD(ctx context.Context, settings store.DocoCD
 	return failing.Store.SetDocoCD(ctx, settings)
 }
 
+func (failing failingStore) Webhook(ctx context.Context) (store.Webhook, error) {
+	if failing.failingMethod == "Webhook" {
+		return store.Webhook{}, errStoreDown
+	}
+	return failing.Store.Webhook(ctx)
+}
+
+func (failing failingStore) SetWebhook(ctx context.Context, webhook store.Webhook) error {
+	if failing.failingMethod == "SetWebhook" {
+		return errStoreDown
+	}
+	return failing.Store.SetWebhook(ctx, webhook)
+}
+
 func (failing failingStore) ApplyTarget(ctx context.Context, fileName string) (store.ApplyTarget, error) {
 	if failing.failingMethod == "ApplyTarget" {
 		return store.ApplyTarget{}, errStoreDown
@@ -57,7 +71,7 @@ func readyToApply(tester *testing.T, handler http.Handler, sessionCookie *http.C
 	envFolderWith(tester, handler, sessionCookie)
 	sendJSON(handler, http.MethodPut, "/api/settings/doco-cd", editorBody(map[string]any{"url": docoCDURL, "apiKey": "api-key"}), sessionCookie)
 	response := sendJSON(handler, http.MethodPut, "/api/env-files/keycloak.env/apply-target",
-		editorBody(map[string]any{"project": "textiq-dev", "services": services}), sessionCookie)
+		editorBody(map[string]any{"adapter": "doco-cd", "project": "textiq-dev", "services": services}), sessionCookie)
 	if response.Code != http.StatusOK {
 		tester.Fatalf("target: %d %s", response.Code, response.Body.String())
 	}
@@ -122,7 +136,7 @@ func TestApplyRecreatesEachService(tester *testing.T) {
 
 	// Changing the services later keeps the applied version; nothing was recreated by that.
 	changed := sendJSON(handler, http.MethodPut, "/api/env-files/keycloak.env/apply-target",
-		editorBody(map[string]any{"project": "textiq-dev", "services": []string{}}), sessionCookie)
+		editorBody(map[string]any{"adapter": "doco-cd", "project": "textiq-dev", "services": []string{}}), sessionCookie)
 	if responseField(tester, changed, "appliedVersion") != newVersion {
 		tester.Fatalf("changed: %s", changed.Body.String())
 	}
@@ -170,7 +184,7 @@ func TestApplyNeedsSetup(tester *testing.T) {
 	if response.Code != http.StatusConflict || responseField(tester, response, "error") != targetNotSet {
 		tester.Fatalf("no target: %d %s", response.Code, response.Body.String())
 	}
-	sendJSON(handler, http.MethodPut, "/api/env-files/keycloak.env/apply-target", editorBody(map[string]any{"project": "textiq-dev"}), sessionCookie)
+	sendJSON(handler, http.MethodPut, "/api/env-files/keycloak.env/apply-target", editorBody(map[string]any{"adapter": "doco-cd", "project": "textiq-dev"}), sessionCookie)
 	response = sendJSON(handler, http.MethodPost, "/api/env-files/keycloak.env/apply", applyBody, sessionCookie)
 	if response.Code != http.StatusConflict || responseField(tester, response, "error") != docoCDNotSet {
 		tester.Fatalf("no doco-cd: %d %s", response.Code, response.Body.String())
@@ -186,9 +200,9 @@ func TestApplyErrors(tester *testing.T) {
 		expectedCode         int
 	}{
 		{http.MethodPut, "/api/env-files/keycloak.env/apply-target", "not json", http.StatusBadRequest},
-		{http.MethodPut, "/api/env-files/keycloak.env/apply-target", `{"project":"TextIQ"}`, http.StatusBadRequest},
-		{http.MethodPut, "/api/env-files/keycloak.env/apply-target", `{"project":"textiq-dev","services":["a/b"]}`, http.StatusBadRequest},
-		{http.MethodPut, "/api/env-files/missing.env/apply-target", `{"project":"textiq-dev"}`, http.StatusNotFound},
+		{http.MethodPut, "/api/env-files/keycloak.env/apply-target", `{"adapter":"doco-cd","project":"TextIQ"}`, http.StatusBadRequest},
+		{http.MethodPut, "/api/env-files/keycloak.env/apply-target", `{"adapter":"doco-cd","project":"textiq-dev","services":["a/b"]}`, http.StatusBadRequest},
+		{http.MethodPut, "/api/env-files/missing.env/apply-target", `{"adapter":"doco-cd","project":"textiq-dev"}`, http.StatusNotFound},
 		{http.MethodPost, "/api/env-files/keycloak.env/apply", "not json", http.StatusBadRequest},
 		{http.MethodPost, "/api/env-files/missing.env/apply", `{"version":"x"}`, http.StatusNotFound},
 		// The file changed after the page loaded: the user must see that change before it goes live.
@@ -210,7 +224,7 @@ func TestApplyRoutesReportStoreFailures(tester *testing.T) {
 	handler, sessionCookie := signedIn(tester, adminStore)
 	version := readyToApply(tester, handler, sessionCookie, docoCD.URL, nil)
 	applyBody := editorBody(map[string]any{"version": version})
-	targetBody := editorBody(map[string]any{"project": "textiq-dev"})
+	targetBody := editorBody(map[string]any{"adapter": "doco-cd", "project": "textiq-dev"})
 	settingsBody := editorBody(map[string]any{"url": "http://doco-cd"})
 	testCases := []struct {
 		failingMethod, method, target, body string
@@ -238,7 +252,7 @@ func TestApplyRoutesReportStoreFailures(tester *testing.T) {
 func TestApplyRoutesNeedTheFolder(tester *testing.T) {
 	handler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
 	for _, route := range [][2]string{
-		{"/api/env-files/a.env/apply-target", `{"project":"textiq-dev"}`},
+		{"/api/env-files/a.env/apply-target", `{"adapter":"doco-cd","project":"textiq-dev"}`},
 		{"/api/env-files/a.env/apply", `{"version":"x"}`},
 	} {
 		method := http.MethodPut

@@ -66,6 +66,8 @@ func TestEnvRoutesRequireSession(tester *testing.T) {
 		{http.MethodPost, "/api/env-files/keycloak.env/history/20260925T080000.000000000Z_admin.env/restore"},
 		{http.MethodGet, "/api/settings/doco-cd"},
 		{http.MethodPut, "/api/settings/doco-cd"},
+		{http.MethodGet, "/api/settings/webhook"},
+		{http.MethodPut, "/api/settings/webhook"},
 		{http.MethodGet, "/api/env-files/keycloak.env/apply-target"},
 		{http.MethodPut, "/api/env-files/keycloak.env/apply-target"},
 		{http.MethodPost, "/api/env-files/keycloak.env/apply"},

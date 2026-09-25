@@ -11,6 +11,7 @@ import { fetchEnvFolder } from './api/env-files-api'
 import { DocoCDForm } from './components/doco-cd-form'
 import { EnvFileList } from './components/env-file-list'
 import { EnvFolderForm } from './components/env-folder-form'
+import { SharedWebhookForm } from './components/shared-webhook-form'
 
 export function EnvFiles() {
   const envFolder = useQuery({
@@ -59,6 +60,8 @@ export function EnvFiles() {
               )}
               <Separator />
               <DocoCDForm />
+              <Separator />
+              <SharedWebhookForm />
             </>
           )}
         </div>
