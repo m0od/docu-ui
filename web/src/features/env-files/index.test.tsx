@@ -8,6 +8,9 @@ vi.mock('./api/env-files-api', () => ({
   fetchEnvFolder: vi.fn(),
   saveEnvFolder: vi.fn(),
 }))
+vi.mock('./components/doco-cd-form', () => ({
+  DocoCDForm: () => <p>doco-cd settings</p>,
+}))
 vi.mock('./components/env-file-list', () => ({
   EnvFileList: () => <p>file list</p>,
 }))
@@ -45,6 +48,9 @@ describe('EnvFiles page', () => {
       .element(screen.getByLabelText('Env folder'))
       .toHaveValue('/host/env')
     await expect.element(screen.getByText('file list')).toBeInTheDocument()
+    await expect
+      .element(screen.getByText('doco-cd settings'))
+      .toBeInTheDocument()
   })
 
   it('shows the server error', async () => {

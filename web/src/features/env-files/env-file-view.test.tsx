@@ -24,6 +24,9 @@ vi.mock('./components/env-text-editor', () => ({
     <button onClick={onClose}>close text editor</button>
   ),
 }))
+vi.mock('./components/apply-panel', () => ({
+  ApplyPanel: () => null,
+}))
 vi.mock('./components/env-history', () => ({
   EnvHistory: ({ onClose }: { onClose: () => void }) => (
     <button onClick={onClose}>close history</button>

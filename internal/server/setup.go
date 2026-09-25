@@ -28,6 +28,10 @@ type Store interface {
 	DeleteSession(ctx context.Context, tokenHash string) error
 	EnvFolder(ctx context.Context) (string, error)
 	SetEnvFolder(ctx context.Context, folder string) error
+	DocoCD(ctx context.Context) (store.DocoCD, error)
+	SetDocoCD(ctx context.Context, settings store.DocoCD) error
+	ApplyTarget(ctx context.Context, fileName string) (store.ApplyTarget, error)
+	SetApplyTarget(ctx context.Context, fileName string, target store.ApplyTarget) error
 }
 
 const (

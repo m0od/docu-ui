@@ -31,6 +31,11 @@ func (handlers envFileHandlers) register(routes *http.ServeMux) {
 	routes.Handle("GET /api/env-files/{name}/history", handlers.requireSession(handlers.listHistory))
 	routes.Handle("GET /api/env-files/{name}/history/{id}", handlers.requireSession(handlers.readHistory))
 	routes.Handle("POST /api/env-files/{name}/history/{id}/restore", handlers.requireSession(handlers.restoreHistory))
+	routes.Handle("GET /api/settings/doco-cd", handlers.requireSession(handlers.docoCD))
+	routes.Handle("PUT /api/settings/doco-cd", handlers.requireSession(handlers.setDocoCD))
+	routes.Handle("GET /api/env-files/{name}/apply-target", handlers.requireSession(handlers.applyTarget))
+	routes.Handle("PUT /api/env-files/{name}/apply-target", handlers.requireSession(handlers.setApplyTarget))
+	routes.Handle("POST /api/env-files/{name}/apply", handlers.requireSession(handlers.apply))
 }
 
 func (handlers envFileHandlers) envFolder(writer http.ResponseWriter, request *http.Request, _ string) {

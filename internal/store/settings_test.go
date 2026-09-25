@@ -37,4 +37,27 @@ func TestSettingsFailAfterClose(tester *testing.T) {
 	if err := testStore.SetEnvFolder(ctx, "/env"); err == nil {
 		tester.Error("SetEnvFolder should fail")
 	}
+	if _, err := testStore.DocoCD(ctx); err == nil {
+		tester.Error("DocoCD should fail")
+	}
+	if err := testStore.SetDocoCD(ctx, DocoCD{}); err == nil {
+		tester.Error("SetDocoCD should fail")
+	}
+}
+
+// Saving new Doco-CD settings replaces both fields, including a key cleared on purpose.
+func TestDocoCDSettings(tester *testing.T) {
+	testStore := openTestStore(tester)
+	ctx := context.Background()
+	if settings, err := testStore.DocoCD(ctx); err != nil || settings != (DocoCD{}) {
+		tester.Fatalf("fresh install: %+v, %v", settings, err)
+	}
+	for _, settings := range []DocoCD{{URL: "http://doco-cd", APIKey: "key-1"}, {URL: "http://other", APIKey: ""}} {
+		if err := testStore.SetDocoCD(ctx, settings); err != nil {
+			tester.Fatal(err)
+		}
+		if saved, err := testStore.DocoCD(ctx); err != nil || saved != settings {
+			tester.Fatalf("got %+v, %v, want %+v", saved, err, settings)
+		}
+	}
 }
