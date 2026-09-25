@@ -8,6 +8,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { fetchEnvFolder } from './api/env-files-api'
+import { DocoCDForm } from './components/doco-cd-form'
 import { EnvFileList } from './components/env-file-list'
 import { EnvFolderForm } from './components/env-folder-form'
 
@@ -56,6 +57,8 @@ export function EnvFiles() {
               ) : (
                 <EnvFileList />
               )}
+              <Separator />
+              <DocoCDForm />
             </>
           )}
         </div>
