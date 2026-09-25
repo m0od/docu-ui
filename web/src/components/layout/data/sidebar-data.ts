@@ -15,6 +15,7 @@ import {
   AudioWaveform,
   Command,
   GalleryVerticalEnd,
+  FileKey,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -44,6 +45,11 @@ export const sidebarData: SidebarData = {
           title: 'Dashboard',
           url: '/',
           icon: LayoutDashboard,
+        },
+        {
+          title: 'Env files',
+          url: '/env-files',
+          icon: FileKey,
         },
       ],
     },

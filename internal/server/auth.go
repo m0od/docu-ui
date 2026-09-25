@@ -3,11 +3,9 @@ package server
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
-	"mime"
 	"net/http"
 	"sync"
 	"time"
@@ -52,13 +50,8 @@ func (handlers authHandlers) register(routes *http.ServeMux) {
 }
 
 func (handlers authHandlers) signIn(writer http.ResponseWriter, request *http.Request) {
-	if mediaType, _, _ := mime.ParseMediaType(request.Header.Get("Content-Type")); mediaType != "application/json" {
-		writeError(writer, http.StatusUnsupportedMediaType, "content type must be application/json")
-		return
-	}
 	var signInInput signInRequest
-	if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, maxRequestBytes)).Decode(&signInInput); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid JSON body")
+	if !decodeJSON(writer, request, &signInInput) {
 		return
 	}
 	ctx := request.Context()
