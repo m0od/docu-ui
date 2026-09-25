@@ -20,7 +20,7 @@ type Store struct {
 // Open opens (creating if needed) the SQLite file at databasePath and brings its schema up to date.
 func Open(databasePath string) (*Store, error) {
 	// sql.Open only fails for an unregistered driver name; the import above registers "sqlite".
-	database, _ := sql.Open("sqlite", "file:"+databasePath+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+	database, _ := sql.Open("sqlite", "file:"+databasePath+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
 	if err := migrate(database, migrationFiles); err != nil {
 		database.Close()
 		return nil, err

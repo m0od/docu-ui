@@ -4,10 +4,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
 import { Loader2, LogIn } from 'lucide-react'
-import { toast } from 'sonner'
-import { IconFacebook, IconGithub } from '@/assets/brand-icons'
 import { useAuthStore } from '@/stores/auth-store'
-import { sleep, cn } from '@/lib/utils'
+import { signIn } from '@/lib/session-api'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -18,17 +17,31 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from '@/components/ui/input-otp'
 import { PasswordInput } from '@/components/password-input'
 
 const formSchema = z.object({
-  email: z.email({
-    error: (iss) => (iss.input === '' ? 'Please enter your email.' : undefined),
-  }),
-  password: z
-    .string()
-    .min(1, 'Please enter your password.')
-    .min(7, 'Password must be at least 7 characters long.'),
+  username: z.string().trim().min(1, 'Please enter your username.'),
+  password: z.string().min(1, 'Please enter your password.'),
+  // Checked on submit only once the server has asked for it.
+  totpCode: z.string(),
 })
+
+type SignInValues = z.infer<typeof formSchema>
+
+// Only same-app paths: "?redirect=https://evil.example" must not send the
+// user off-site after a real sign-in.
+function safeRedirectPath(redirectTo: string | undefined): string {
+  if (redirectTo?.startsWith('/') && !redirectTo.startsWith('//')) {
+    return redirectTo
+  }
+  return '/'
+}
 
 interface UserAuthFormProps extends React.HTMLAttributes<HTMLFormElement> {
   redirectTo?: string
@@ -40,45 +53,39 @@ export function UserAuthForm({
   ...props
 }: UserAuthFormProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [totpRequired, setTotpRequired] = useState(false)
   const navigate = useNavigate()
   const { auth } = useAuthStore()
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<SignInValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      email: '',
-      password: '',
-    },
+    defaultValues: { username: '', password: '', totpCode: '' },
   })
 
-  function onSubmit(data: z.infer<typeof formSchema>) {
+  async function onSubmit(values: SignInValues) {
+    if (totpRequired && values.totpCode.length !== 6) {
+      form.setError('totpCode', { message: 'Enter the 6-digit code.' })
+      return
+    }
     setIsLoading(true)
-
-    toast.promise(sleep(2000), {
-      loading: 'Signing in...',
-      success: () => {
-        setIsLoading(false)
-
-        // Mock successful authentication with expiry computed at success time
-        const mockUser = {
-          accountNo: 'ACC001',
-          email: data.email,
-          role: ['user'],
-          exp: Date.now() + 24 * 60 * 60 * 1000, // 24 hours from now
-        }
-
-        // Set user and access token
-        auth.setUser(mockUser)
-        auth.setAccessToken('mock-access-token')
-
-        // Redirect to the stored location or default to dashboard
-        const targetPath = redirectTo || '/'
-        navigate({ to: targetPath, replace: true })
-
-        return `Welcome back, ${data.email}!`
-      },
-      error: 'Error',
-    })
+    try {
+      const result = await signIn(values)
+      if (result.status === 'totp-required') {
+        setTotpRequired(true)
+        form.setError('root', { message: result.message })
+        return
+      }
+      auth.setUser({ username: result.username })
+      navigate({ to: safeRedirectPath(redirectTo), replace: true })
+    } catch (error) {
+      // A used or wrong code cannot be retried; clear it for the next one.
+      form.setValue('totpCode', '')
+      form.setError('root', {
+        message: error instanceof Error ? error.message : 'Sign-in failed.',
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -90,12 +97,16 @@ export function UserAuthForm({
       >
         <FormField
           control={form.control}
-          name='email'
+          name='username'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>Username</FormLabel>
               <FormControl>
-                <Input placeholder='name@example.com' {...field} />
+                <Input
+                  autoComplete='username'
+                  readOnly={totpRequired}
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -108,36 +119,60 @@ export function UserAuthForm({
             <FormItem className='relative'>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <PasswordInput placeholder='********' {...field} />
+                <PasswordInput
+                  autoComplete='current-password'
+                  placeholder='********'
+                  readOnly={totpRequired}
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
+        {totpRequired && (
+          <FormField
+            control={form.control}
+            name='totpCode'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Code from your authenticator app</FormLabel>
+                <FormControl>
+                  <InputOTP
+                    maxLength={6}
+                    autoFocus
+                    {...field}
+                    containerClassName='justify-center'
+                  >
+                    <InputOTPGroup>
+                      <InputOTPSlot index={0} />
+                      <InputOTPSlot index={1} />
+                      <InputOTPSlot index={2} />
+                    </InputOTPGroup>
+                    <InputOTPSeparator />
+                    <InputOTPGroup>
+                      <InputOTPSlot index={3} />
+                      <InputOTPSlot index={4} />
+                      <InputOTPSlot index={5} />
+                    </InputOTPGroup>
+                  </InputOTP>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {form.formState.errors.root && (
+          <p role='alert' className='text-sm font-medium text-destructive'>
+            {form.formState.errors.root.message}
+          </p>
+        )}
+
         <Button className='mt-2' disabled={isLoading}>
           {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
           Sign in
         </Button>
-
-        <div className='relative my-2'>
-          <div className='absolute inset-0 flex items-center'>
-            <span className='w-full border-t' />
-          </div>
-          <div className='relative flex justify-center text-xs uppercase'>
-            <span className='bg-background px-2 text-muted-foreground'>
-              Or continue with
-            </span>
-          </div>
-        </div>
-
-        <div className='grid grid-cols-2 gap-2'>
-          <Button variant='outline' type='button' disabled={isLoading}>
-            <IconGithub className='h-4 w-4' /> GitHub
-          </Button>
-          <Button variant='outline' type='button' disabled={isLoading}>
-            <IconFacebook className='h-4 w-4' /> Facebook
-          </Button>
-        </div>
       </form>
     </Form>
   )

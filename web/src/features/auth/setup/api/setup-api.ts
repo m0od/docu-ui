@@ -1,5 +1,5 @@
-// Calls to the first-run setup API. URLs are relative so they resolve against
-// <base href>, which keeps them working when Docu-UI is served under a sub-path.
+// Calls to the first-run setup API.
+import { postJson, requestJson } from '@/lib/api-client'
 
 export type CreateFirstAccountInput = {
   setupToken: string
@@ -8,20 +8,6 @@ export type CreateFirstAccountInput = {
   // Empty when the admin skips two-factor authentication.
   totpSecret: string
   totpCode: string
-}
-
-async function requestJson<ResponseBody>(
-  url: string,
-  init?: RequestInit
-): Promise<ResponseBody> {
-  const response = await fetch(url, init)
-  const responseBody = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(
-      responseBody.error ?? `Request failed (HTTP ${response.status})`
-    )
-  }
-  return responseBody as ResponseBody
 }
 
 export async function isSetupRequired(): Promise<boolean> {
@@ -39,11 +25,7 @@ export async function fetchTotpSecret(): Promise<string> {
 export async function createFirstAccount(
   input: CreateFirstAccountInput
 ): Promise<void> {
-  await requestJson('api/setup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
-  })
+  await postJson('api/setup', input)
 }
 
 // otpauthUri builds the link authenticator apps read from the QR code.

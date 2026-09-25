@@ -15,10 +15,17 @@ import (
 	"github.com/m0od/docu-ui/internal/store"
 )
 
-// AccountStore is the part of the store the setup flow needs.
-type AccountStore interface {
+// Store is the persistence the HTTP layer needs (implemented by internal/store).
+type Store interface {
 	NeedsSetup(ctx context.Context) (bool, error)
 	CreateFirstAccount(ctx context.Context, username, passwordHash, totpSecret string) error
+	FindAccount(ctx context.Context, username string) (store.Account, error)
+	RecordFailedLogin(ctx context.Context, accountID int64, maxFailures int, lockUntil time.Time) error
+	ResetFailedLogins(ctx context.Context, accountID int64) error
+	UseTOTPStep(ctx context.Context, accountID, timeStep int64) (bool, error)
+	CreateSession(ctx context.Context, tokenHash string, accountID int64, now, expiresAt time.Time) error
+	FindSessionUsername(ctx context.Context, tokenHash string, now time.Time) (string, error)
+	DeleteSession(ctx context.Context, tokenHash string) error
 }
 
 const (
@@ -42,7 +49,7 @@ type setupRequest struct {
 }
 
 type setupHandlers struct {
-	accounts   AccountStore
+	accounts   Store
 	setupToken string
 }
 
