@@ -37,18 +37,25 @@ func ValidTOTPSecret(secret string) bool {
 
 // VerifyTOTP reports whether code is the RFC 6238 code for secret at now (± the allowed skew).
 func VerifyTOTP(secret, code string, now time.Time) bool {
+	_, matched := MatchTOTPStep(secret, code, now)
+	return matched
+}
+
+// MatchTOTPStep is VerifyTOTP that also returns the time step the code belongs to.
+// Sign-in stores that step and rejects any code whose step is not newer, so a code cannot be replayed.
+func MatchTOTPStep(secret, code string, now time.Time) (int64, bool) {
 	secretBytes, err := totpSecretEncoding.DecodeString(strings.ToUpper(secret))
 	if err != nil || len(code) != totpDigits {
-		return false
+		return 0, false
 	}
 	currentStep := now.Unix() / totpPeriodSeconds
 	for stepOffset := int64(-totpAllowedSkewSteps); stepOffset <= totpAllowedSkewSteps; stepOffset++ {
 		expectedCode := totpCode(secretBytes, uint64(currentStep+stepOffset))
 		if subtle.ConstantTimeCompare([]byte(expectedCode), []byte(code)) == 1 {
-			return true
+			return currentStep + stepOffset, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 // totpCode is the HOTP value (RFC 4226) for one time step.

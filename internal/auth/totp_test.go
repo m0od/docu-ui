@@ -55,3 +55,15 @@ func TestTOTPSecrets(tester *testing.T) {
 		tester.Error("non-base32 secret accepted")
 	}
 }
+
+// Sign-in keys replay protection on the returned step, so it must be the step the code was made for.
+func TestMatchTOTPStepReturnsCodeStep(tester *testing.T) {
+	codeTime := time.Unix(1111111109, 0)
+	matchedStep, matched := MatchTOTPStep(rfcSecret, "081804", codeTime.Add(30*time.Second))
+	if !matched || matchedStep != 1111111109/30 {
+		tester.Fatalf("got step %d matched %v, want %d", matchedStep, matched, 1111111109/30)
+	}
+	if _, matched := MatchTOTPStep(rfcSecret, "000000", codeTime); matched {
+		tester.Fatal("wrong code matched")
+	}
+}

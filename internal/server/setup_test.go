@@ -19,6 +19,7 @@ const testSetupToken = "setup-token-from-log"
 
 // fakeAccounts mimics the store: setup is open until the first account is created.
 type fakeAccounts struct {
+	Store             // methods setup never calls; a call would panic and fail the test
 	createdUsername   string
 	createdPassword   string
 	createdTOTPSecret string
@@ -40,7 +41,7 @@ func (accounts *fakeAccounts) CreateFirstAccount(_ context.Context, username, pa
 
 func newSetupServer(tester *testing.T, accounts *fakeAccounts, setupToken string) http.Handler {
 	tester.Helper()
-	handler, err := New(Config{Accounts: accounts, SetupToken: setupToken}, testUI)
+	handler, err := New(Config{Store: accounts, SetupToken: setupToken}, testUI)
 	if err != nil {
 		tester.Fatal(err)
 	}

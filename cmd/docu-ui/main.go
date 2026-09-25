@@ -39,8 +39,10 @@ func main() {
 
 	handler, err := server.New(server.Config{
 		BasePath:   os.Getenv("DOCU_BASE_PATH"),
-		Accounts:   accountStore,
+		Store:      accountStore,
 		SetupToken: setupToken,
+		// Only for plain-HTTP setups on a trusted network; browsers drop Secure cookies over http.
+		InsecureCookie: os.Getenv("DOCU_INSECURE_COOKIE") == "true",
 	}, web.Dist())
 	if err != nil {
 		fatal("init server", err)

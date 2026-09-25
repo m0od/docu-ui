@@ -14,10 +14,13 @@ import (
 type Config struct {
 	// BasePath is the sub-path the app is served under behind a gateway, e.g. "/docu-ui". Empty means "/".
 	BasePath string
-	// Accounts backs first-run setup.
-	Accounts AccountStore
+	// Store backs setup, sign-in and sessions.
+	Store Store
 	// SetupToken must be typed on the setup page; it is printed to the log only while no account exists.
 	SetupToken string
+	// InsecureCookie drops the Secure flag from the session cookie so sign-in works over plain HTTP.
+	// Only for a trusted network; normally TLS is on at the gateway or in Docu-UI itself.
+	InsecureCookie bool
 }
 
 // New returns the root handler.
@@ -37,7 +40,8 @@ func New(config Config, uiFiles fs.FS) (http.Handler, error) {
 		writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = writer.Write([]byte("ok"))
 	})
-	setupHandlers{accounts: config.Accounts, setupToken: config.SetupToken}.register(appRoutes)
+	setupHandlers{accounts: config.Store, setupToken: config.SetupToken}.register(appRoutes)
+	authHandlers{store: config.Store, cookiePath: basePath + "/", secureCookie: !config.InsecureCookie}.register(appRoutes)
 	// Unknown API paths get a JSON 404, not the UI page.
 	appRoutes.HandleFunc("GET /api/", func(writer http.ResponseWriter, _ *http.Request) {
 		writeError(writer, http.StatusNotFound, "not found")
