@@ -32,14 +32,29 @@ export async function requestJson<ResponseBody>(
   return responseBody as ResponseBody
 }
 
-// postJson sends a JSON body; the server rejects POSTs without this content
-// type, which blocks cross-site form posts (CSRF).
+// postJson and putJson send a JSON body; the server rejects writes without this
+// content type, which blocks cross-site form posts (CSRF).
 export function postJson<ResponseBody>(
   url: string,
   requestBody?: unknown
 ): Promise<ResponseBody> {
+  return sendJson<ResponseBody>('POST', url, requestBody)
+}
+
+export function putJson<ResponseBody>(
+  url: string,
+  requestBody: unknown
+): Promise<ResponseBody> {
+  return sendJson<ResponseBody>('PUT', url, requestBody)
+}
+
+function sendJson<ResponseBody>(
+  method: string,
+  url: string,
+  requestBody: unknown
+): Promise<ResponseBody> {
   return requestJson<ResponseBody>(url, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(requestBody ?? {}),
   })

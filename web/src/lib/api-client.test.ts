@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, postJson, requestJson } from './api-client'
+import { ApiError, postJson, putJson, requestJson } from './api-client'
 
 function mockFetch(response: Response) {
   return vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(response)
@@ -60,6 +60,18 @@ describe('api-client', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{"username":"admin"}',
+    })
+  })
+
+  it('puts JSON with the JSON content type', async () => {
+    const fetchSpy = mockFetch(Response.json({}))
+
+    await putJson('api/settings/env-folder', { folder: '/host/env' })
+
+    expect(fetchSpy).toHaveBeenCalledWith('api/settings/env-folder', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"folder":"/host/env"}',
     })
   })
 })

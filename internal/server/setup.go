@@ -26,6 +26,8 @@ type Store interface {
 	CreateSession(ctx context.Context, tokenHash string, accountID int64, now, expiresAt time.Time) error
 	FindSessionUsername(ctx context.Context, tokenHash string, now time.Time) (string, error)
 	DeleteSession(ctx context.Context, tokenHash string) error
+	EnvFolder(ctx context.Context) (string, error)
+	SetEnvFolder(ctx context.Context, folder string) error
 }
 
 const (
@@ -78,14 +80,8 @@ func (handlers setupHandlers) totpSecret(writer http.ResponseWriter, request *ht
 }
 
 func (handlers setupHandlers) createFirstAccount(writer http.ResponseWriter, request *http.Request) {
-	// Browsers cannot send application/json cross-site without a CORS preflight, which we never allow.
-	if mediaType, _, _ := mime.ParseMediaType(request.Header.Get("Content-Type")); mediaType != "application/json" {
-		writeError(writer, http.StatusUnsupportedMediaType, "content type must be application/json")
-		return
-	}
 	var setupInput setupRequest
-	if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, maxRequestBytes)).Decode(&setupInput); err != nil {
-		writeError(writer, http.StatusBadRequest, "invalid JSON body")
+	if !decodeJSON(writer, request, &setupInput) {
 		return
 	}
 	if !handlers.setupOpen(writer, request) {
@@ -146,6 +142,20 @@ func validateSetup(setupInput setupRequest) string {
 		return "TOTP code does not match: check the time on your phone and try the next code"
 	}
 	return ""
+}
+
+// decodeJSON reads a JSON request body into target, or answers 415/400 and returns false.
+func decodeJSON(writer http.ResponseWriter, request *http.Request, target any) bool {
+	// Browsers cannot send application/json cross-site without a CORS preflight, which we never allow.
+	if mediaType, _, _ := mime.ParseMediaType(request.Header.Get("Content-Type")); mediaType != "application/json" {
+		writeError(writer, http.StatusUnsupportedMediaType, "content type must be application/json")
+		return false
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(writer, request.Body, maxRequestBytes)).Decode(target); err != nil {
+		writeError(writer, http.StatusBadRequest, "invalid JSON body")
+		return false
+	}
+	return true
 }
 
 func writeJSON(writer http.ResponseWriter, statusCode int, payload any) {
