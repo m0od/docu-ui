@@ -35,7 +35,9 @@ type Variable struct {
 
 // File is an env file without its values.
 type File struct {
-	Name      string     `json:"name"`
+	Name string `json:"name"`
+	// Version identifies this exact content; a save must send it back (see WriteContent).
+	Version   string     `json:"version"`
 	Variables []Variable `json:"variables"`
 	// InvalidLines are neither comments nor KEY=value; Compose would reject the file.
 	InvalidLines []int `json:"invalidLines"`
@@ -87,7 +89,7 @@ func Read(folder, name string) (File, error) {
 			Overridden: lastLineOfKey[assignment.key] != assignment.line,
 		})
 	}
-	return File{Name: name, Variables: variables, InvalidLines: invalidLines}, nil
+	return File{Name: name, Version: contentVersion(content), Variables: variables, InvalidLines: invalidLines}, nil
 }
 
 // Value returns the value of key as written in the file (quotes kept).
@@ -133,17 +135,34 @@ type assignment struct {
 func parse(content string) (assignments []assignment, invalidLines []int) {
 	invalidLines = []int{}
 	for index, rawLine := range strings.Split(content, "\n") {
-		line := strings.TrimSpace(rawLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, found := strings.Cut(strings.TrimPrefix(line, "export "), "=")
-		key = strings.TrimSpace(key)
-		if !found || !keyPattern.MatchString(key) {
+		key, value, kind := parseLine(rawLine)
+		switch kind {
+		case assignmentLine:
+			assignments = append(assignments, assignment{key: key, value: value, line: index + 1})
+		case invalidLine:
 			invalidLines = append(invalidLines, index+1)
-			continue
 		}
-		assignments = append(assignments, assignment{key: key, value: strings.TrimSpace(value), line: index + 1})
 	}
 	return assignments, invalidLines
+}
+
+type lineKind int
+
+const (
+	skippedLine lineKind = iota // blank or comment
+	assignmentLine
+	invalidLine
+)
+
+func parseLine(rawLine string) (key, value string, kind lineKind) {
+	line := strings.TrimSpace(rawLine)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return "", "", skippedLine
+	}
+	key, value, found := strings.Cut(strings.TrimPrefix(line, "export "), "=")
+	key = strings.TrimSpace(key)
+	if !found || !keyPattern.MatchString(key) {
+		return "", "", invalidLine
+	}
+	return key, strings.TrimSpace(value), assignmentLine
 }

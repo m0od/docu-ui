@@ -80,14 +80,16 @@ KC_DB=mariadb
 
 func TestReadListsKeysWithoutValues(tester *testing.T) {
 	folder := tester.TempDir()
-	writeFile(tester, filepath.Join(folder, "keycloak.env"), strings.ReplaceAll(sampleEnv, "\n", "\r\n"))
+	windowsContent := strings.ReplaceAll(sampleEnv, "\n", "\r\n")
+	writeFile(tester, filepath.Join(folder, "keycloak.env"), windowsContent)
 
 	envFile, err := Read(folder, "keycloak.env")
 	if err != nil {
 		tester.Fatal(err)
 	}
 	want := File{
-		Name: "keycloak.env",
+		Name:    "keycloak.env",
+		Version: contentVersion(windowsContent),
 		Variables: []Variable{
 			{Key: "KC_DB", Line: 2, Overridden: true},
 			{Key: "KC_HOSTNAME", Line: 3},

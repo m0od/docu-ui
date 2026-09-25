@@ -1,28 +1,27 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
-import { ArrowLeft, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, FileCode, TriangleAlert } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Table,
-  TableBody,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { ConfigDrawer } from '@/components/config-drawer'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { readEnvFile } from './api/env-files-api'
-import { EnvVariableRow } from './components/env-variable-row'
+import { EnvTextEditor } from './components/env-text-editor'
+import { EnvVariablesEditor } from './components/env-variables-editor'
 
 export function EnvFileView() {
   const { name: fileName } = useParams({
     from: '/_authenticated/env-files/$name',
   })
+  const [isTextMode, setIsTextMode] = useState(false)
+  const [isTextWarningOpen, setIsTextWarningOpen] = useState(false)
   const envFile = useQuery({
     queryKey: ['env', 'file', fileName],
     queryFn: () => readEnvFile(fileName),
@@ -56,7 +55,7 @@ export function EnvFileView() {
           </p>
         )}
         {envFile.isSuccess && (
-          <div className='grid max-w-4xl gap-4'>
+          <div className='grid max-w-5xl gap-4'>
             {envFile.data.invalidLines.length > 0 && (
               <Alert variant='destructive'>
                 <TriangleAlert />
@@ -69,37 +68,44 @@ export function EnvFileView() {
                 </AlertDescription>
               </Alert>
             )}
-            {envFile.data.variables.length === 0 ? (
-              <p className='text-sm text-muted-foreground'>
-                This file sets no variables.
-              </p>
+            {isTextMode ? (
+              <EnvTextEditor
+                fileName={fileName}
+                onClose={() => setIsTextMode(false)}
+              />
             ) : (
-              <div className='rounded-md border'>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Line</TableHead>
-                      <TableHead>Key</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead>
-                        <span className='sr-only'>Show value</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {envFile.data.variables.map((variable) => (
-                      <EnvVariableRow
-                        key={variable.line}
-                        fileName={fileName}
-                        variable={variable}
-                      />
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <>
+                <div className='flex justify-end'>
+                  <Button
+                    variant='outline'
+                    onClick={() => setIsTextWarningOpen(true)}
+                  >
+                    <FileCode />
+                    Edit as text
+                  </Button>
+                </div>
+                <EnvVariablesEditor
+                  // A new version (after a save) starts a fresh editor.
+                  key={envFile.data.version}
+                  fileName={fileName}
+                  version={envFile.data.version}
+                  variables={envFile.data.variables}
+                />
+              </>
             )}
           </div>
         )}
+        <ConfirmDialog
+          open={isTextWarningOpen}
+          onOpenChange={setIsTextWarningOpen}
+          title='Show every value?'
+          desc='The text editor shows all values of this file in clear, including passwords. Make sure nobody else can see your screen.'
+          confirmText='Show and edit'
+          handleConfirm={() => {
+            setIsTextWarningOpen(false)
+            setIsTextMode(true)
+          }}
+        />
       </Main>
     </>
   )
