@@ -13,6 +13,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { readEnvFile } from './api/env-files-api'
+import { ApplyPanel } from './components/apply-panel'
 import { EnvHistory } from './components/env-history'
 import { EnvTextEditor } from './components/env-text-editor'
 import { EnvVariablesEditor } from './components/env-variables-editor'
@@ -88,6 +89,10 @@ export function EnvFileView() {
             )}
             {viewMode === 'variables' && (
               <>
+                <ApplyPanel
+                  fileName={fileName}
+                  version={envFile.data.version}
+                />
                 <div className='flex justify-end gap-2'>
                   <Button
                     variant='outline'

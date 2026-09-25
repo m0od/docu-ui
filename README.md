@@ -70,6 +70,19 @@ sudo chown -R 65532:65532 /opt/textiq/env    # or: docker run --user <uid of the
 
 Without it, saving fails with `permission denied` and the file is left untouched.
 
+### Applying
+
+Saving only changes the file; running containers keep the old values until they are recreated.
+Docu-UI asks [Doco-CD](https://doco.cd) to do it through its REST API (`POST /v1/api/project/{project}/recreate?service=...`),
+which reloads the Compose project, so the new `env_file` values reach the containers.
+
+1. Enable the Doco-CD API by setting `API_SECRET` (or `API_SECRET_FILE`) on the Doco-CD container.
+2. On the **Env files** page, enter the Doco-CD URL as Docu-UI reaches it (e.g. `http://doco-cd:80` on a shared Docker network) and the API secret.
+   The secret is stored in `/data/docu-ui.db` and never sent back to the browser.
+3. On a file's page, say which Compose project and services use it (no services: the whole project).
+
+After a save the page shows **Saved, not applied yet** with an **Apply** button. If recreating fails, Doco-CD's reason is shown and the file stays marked as not applied.
+
 `GET /healthz` returns `ok` for load balancer and container health checks.
 
 ## License

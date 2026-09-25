@@ -64,6 +64,11 @@ func TestEnvRoutesRequireSession(tester *testing.T) {
 		{http.MethodGet, "/api/env-files/keycloak.env/history"},
 		{http.MethodGet, "/api/env-files/keycloak.env/history/20260925T080000.000000000Z_admin.env"},
 		{http.MethodPost, "/api/env-files/keycloak.env/history/20260925T080000.000000000Z_admin.env/restore"},
+		{http.MethodGet, "/api/settings/doco-cd"},
+		{http.MethodPut, "/api/settings/doco-cd"},
+		{http.MethodGet, "/api/env-files/keycloak.env/apply-target"},
+		{http.MethodPut, "/api/env-files/keycloak.env/apply-target"},
+		{http.MethodPost, "/api/env-files/keycloak.env/apply"},
 	}
 	for _, route := range routes {
 		if response := sendJSON(handler, route[0], route[1], envFolderBody("/tmp")); response.Code != http.StatusUnauthorized {
