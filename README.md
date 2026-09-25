@@ -22,6 +22,19 @@ make image   # docker build
 |---|---|---|
 | `DOCU_ADDR` | `:8080` | Listen address |
 | `DOCU_BASE_PATH` | *(empty)* | Sub-path when served behind a gateway, e.g. `/docu-ui` |
+| `DOCU_DATA_DIR` | `/data` | Where the SQLite database (`docu-ui.db`) lives; mount a volume here |
+| `DOCU_TLS_CERT` / `DOCU_TLS_KEY` | *(empty)* | PEM cert and key to serve HTTPS directly (standalone). Leave empty behind a TLS-terminating gateway |
+
+## First run
+
+On first start there is no account. Docu-UI prints a one-time **setup token** to its log:
+
+```sh
+docker logs docu-ui 2>&1 | grep setup_token
+```
+
+Open the UI, enter the token, and create the admin account. Two-factor (TOTP) is optional on that page.
+The setup page closes for good once the first account exists; a new token is printed on each restart until then.
 
 `GET /healthz` returns `ok` for load balancer and container health checks.
 
