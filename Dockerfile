@@ -21,8 +21,13 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags=
 # Empty dir so the runtime image gets a /data owned by the nonroot user (distroless has no mkdir)
 RUN mkdir -p /out/data
 
-# 3. Runtime — only the binary
+# 3. Docker CLI + Compose plugin for the Docker Compose apply adapter (both static binaries)
+FROM docker:29-cli AS docker-cli
+
+# 4. Runtime — the binary and the Docker CLI
 FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose /usr/local/libexec/docker/cli-plugins/docker-compose
 COPY --from=api /out/docu-ui /docu-ui
 COPY --from=api --chown=65532:65532 /out/data /data
 VOLUME /data

@@ -14,6 +14,7 @@ var ErrNoApplyTarget = errors.New("no apply target")
 const (
 	AdapterDocoCD  = "doco-cd"
 	AdapterWebhook = "webhook"
+	AdapterCompose = "compose"
 )
 
 // ApplyTarget says how an env file is applied and which Compose project and services use it.
