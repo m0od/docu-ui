@@ -8,7 +8,11 @@ import (
 	"github.com/m0od/docu-ui/internal/envfiles"
 )
 
-const folderNotSet = "choose the env folder first"
+const (
+	folderNotSet = "choose the env folder first"
+	cannotRead   = "cannot read the env file"
+	cannotSave   = "cannot save the env file"
+)
 
 type envFileHandlers struct {
 	store          Store
@@ -21,6 +25,9 @@ func (handlers envFileHandlers) register(routes *http.ServeMux) {
 	routes.Handle("GET /api/env-files", handlers.requireSession(handlers.listFiles))
 	routes.Handle("GET /api/env-files/{name}", handlers.requireSession(handlers.readFile))
 	routes.Handle("GET /api/env-files/{name}/variables/{key}", handlers.requireSession(handlers.revealValue))
+	routes.Handle("PATCH /api/env-files/{name}/variables", handlers.requireSession(handlers.changeVariables))
+	routes.Handle("GET /api/env-files/{name}/content", handlers.requireSession(handlers.readContent))
+	routes.Handle("PUT /api/env-files/{name}/content", handlers.requireSession(handlers.writeContent))
 }
 
 func (handlers envFileHandlers) envFolder(writer http.ResponseWriter, request *http.Request, _ string) {
@@ -73,7 +80,7 @@ func (handlers envFileHandlers) readFile(writer http.ResponseWriter, request *ht
 	}
 	envFile, err := envfiles.Read(folder, request.PathValue("name"))
 	if err != nil {
-		writeEnvFileError(writer, err)
+		writeEnvFileError(writer, err, cannotRead)
 		return
 	}
 	writeJSON(writer, http.StatusOK, envFile)
@@ -87,12 +94,77 @@ func (handlers envFileHandlers) revealValue(writer http.ResponseWriter, request 
 	fileName, key := request.PathValue("name"), request.PathValue("key")
 	value, err := envfiles.Value(folder, fileName, key)
 	if err != nil {
-		writeEnvFileError(writer, err)
+		writeEnvFileError(writer, err, cannotRead)
 		return
 	}
 	// Audit trail: who looked at which secret (never the value itself).
 	slog.Info("env value revealed", "user", username, "file", fileName, "key", key)
 	writeJSON(writer, http.StatusOK, map[string]string{"value": value})
+}
+
+// readContent returns the whole file, every value in clear, for the text editor.
+func (handlers envFileHandlers) readContent(writer http.ResponseWriter, request *http.Request, username string) {
+	folder, ok := handlers.folder(writer, request)
+	if !ok {
+		return
+	}
+	fileName := request.PathValue("name")
+	content, version, err := envfiles.Content(folder, fileName)
+	if err != nil {
+		writeEnvFileError(writer, err, cannotRead)
+		return
+	}
+	slog.Info("env file opened as text", "user", username, "file", fileName)
+	writeJSON(writer, http.StatusOK, map[string]string{"content": content, "version": version})
+}
+
+func (handlers envFileHandlers) writeContent(writer http.ResponseWriter, request *http.Request, username string) {
+	var contentInput struct {
+		BaseVersion string `json:"baseVersion"`
+		Content     string `json:"content"`
+	}
+	if !decodeJSON(writer, request, &contentInput) {
+		return
+	}
+	folder, ok := handlers.folder(writer, request)
+	if !ok {
+		return
+	}
+	fileName := request.PathValue("name")
+	version, err := envfiles.WriteContent(folder, fileName, contentInput.BaseVersion, username, contentInput.Content)
+	if err != nil {
+		writeEnvFileError(writer, err, cannotSave)
+		return
+	}
+	slog.Info("env file saved as text", "user", username, "file", fileName)
+	writeJSON(writer, http.StatusOK, map[string]string{"version": version})
+}
+
+func (handlers envFileHandlers) changeVariables(writer http.ResponseWriter, request *http.Request, username string) {
+	var changesInput struct {
+		BaseVersion string            `json:"baseVersion"`
+		Changes     []envfiles.Change `json:"changes"`
+	}
+	if !decodeJSON(writer, request, &changesInput) {
+		return
+	}
+	folder, ok := handlers.folder(writer, request)
+	if !ok {
+		return
+	}
+	fileName := request.PathValue("name")
+	version, err := envfiles.ApplyChanges(folder, fileName, changesInput.BaseVersion, username, changesInput.Changes)
+	if err != nil {
+		writeEnvFileError(writer, err, cannotSave)
+		return
+	}
+	changedKeys := make([]string, 0, len(changesInput.Changes))
+	for _, change := range changesInput.Changes {
+		changedKeys = append(changedKeys, change.Key)
+	}
+	// Keys only: the log must never hold a secret value.
+	slog.Info("env variables changed", "user", username, "file", fileName, "keys", changedKeys)
+	writeJSON(writer, http.StatusOK, map[string]string{"version": version})
 }
 
 // folder returns the saved env folder, or answers 409/500 and returns false.
@@ -109,14 +181,18 @@ func (handlers envFileHandlers) folder(writer http.ResponseWriter, request *http
 	return folder, true
 }
 
-func writeEnvFileError(writer http.ResponseWriter, err error) {
+// writeEnvFileError maps envfiles errors to HTTP. Other errors (permission denied, disk full)
+// are shown after failureMessage, since the fix is usually on the host (mount, owner).
+func writeEnvFileError(writer http.ResponseWriter, err error, failureMessage string) {
 	switch {
-	case errors.Is(err, envfiles.ErrInvalidName):
+	case errors.Is(err, envfiles.ErrInvalidName), errors.Is(err, envfiles.ErrInvalidKey), errors.Is(err, envfiles.ErrInvalidValue):
 		writeError(writer, http.StatusBadRequest, err.Error())
 	case errors.Is(err, envfiles.ErrFileNotFound), errors.Is(err, envfiles.ErrVariableNotFound):
 		writeError(writer, http.StatusNotFound, err.Error())
+	case errors.Is(err, envfiles.ErrConflict):
+		writeError(writer, http.StatusConflict, err.Error())
 	default:
-		slog.Error("read env file", "err", err)
-		writeError(writer, http.StatusInternalServerError, "cannot read the env file")
+		slog.Error(failureMessage, "err", err)
+		writeError(writer, http.StatusInternalServerError, failureMessage+": "+err.Error())
 	}
 }

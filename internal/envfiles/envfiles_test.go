@@ -80,14 +80,16 @@ APP_DB=mariadb
 
 func TestReadListsKeysWithoutValues(tester *testing.T) {
 	folder := tester.TempDir()
-	writeFile(tester, filepath.Join(folder, "api.env"), strings.ReplaceAll(sampleEnv, "\n", "\r\n"))
+	windowsContent := strings.ReplaceAll(sampleEnv, "\n", "\r\n")
+	writeFile(tester, filepath.Join(folder, "api.env"), windowsContent)
 
 	envFile, err := Read(folder, "api.env")
 	if err != nil {
 		tester.Fatal(err)
 	}
 	want := File{
-		Name: "api.env",
+		Name:    "api.env",
+		Version: contentVersion(windowsContent),
 		Variables: []Variable{
 			{Key: "APP_DB", Line: 2, Overridden: true},
 			{Key: "APP_HOSTNAME", Line: 3},

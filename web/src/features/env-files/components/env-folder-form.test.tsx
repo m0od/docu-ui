@@ -39,6 +39,21 @@ describe('EnvFolderForm', () => {
     )
   })
 
+  // No double submit while the server is still checking the folder.
+  it('disables Save while saving', async () => {
+    vi.mocked(saveEnvFolder).mockReturnValueOnce(new Promise(() => {}))
+    const screen = await render(
+      withQueryClient(<EnvFolderForm savedFolder='' />)
+    )
+
+    await userEvent.fill(screen.getByLabelText('Env folder'), '/host/env')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await expect
+      .element(screen.getByRole('button', { name: 'Save' }))
+      .toBeDisabled()
+  })
+
   // The server refuses paths that are not mounted; the user must see why.
   it('shows why the server refused the folder', async () => {
     vi.mocked(saveEnvFolder).mockRejectedValueOnce(
