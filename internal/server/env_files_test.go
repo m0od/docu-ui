@@ -61,6 +61,9 @@ func TestEnvRoutesRequireSession(tester *testing.T) {
 		{http.MethodPatch, "/api/env-files/keycloak.env/variables"},
 		{http.MethodGet, "/api/env-files/keycloak.env/content"},
 		{http.MethodPut, "/api/env-files/keycloak.env/content"},
+		{http.MethodGet, "/api/env-files/keycloak.env/history"},
+		{http.MethodGet, "/api/env-files/keycloak.env/history/20260925T080000.000000000Z_admin.env"},
+		{http.MethodPost, "/api/env-files/keycloak.env/history/20260925T080000.000000000Z_admin.env/restore"},
 	}
 	for _, route := range routes {
 		if response := sendJSON(handler, route[0], route[1], envFolderBody("/tmp")); response.Code != http.StatusUnauthorized {
@@ -82,6 +85,9 @@ func TestEnvFilesAskForFolderFirst(tester *testing.T) {
 		{http.MethodPatch, "/api/env-files/a.env/variables"},
 		{http.MethodGet, "/api/env-files/a.env/content"},
 		{http.MethodPut, "/api/env-files/a.env/content"},
+		{http.MethodGet, "/api/env-files/a.env/history"},
+		{http.MethodGet, "/api/env-files/a.env/history/20260925T080000.000000000Z_admin.env"},
+		{http.MethodPost, "/api/env-files/a.env/history/20260925T080000.000000000Z_admin.env/restore"},
 	}
 	for _, route := range routes {
 		method, target := route[0], route[1]

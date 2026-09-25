@@ -59,6 +59,9 @@ Both show the changes before saving. If someone saved the same file in the meant
 Before each save, the previous content is kept in `<folder>/.history/<file>/<time>_<user>.env` (newest 50 per file).
 The file is rewritten in place, so its owner and mode stay as they are.
 
+**History** lists the kept versions. Pick one to see what restoring it would change in the current file, then restore it.
+A restore is a save like any other: the content it replaces goes to the history too, so it can be undone.
+
 Docu-UI runs as user `65532` inside the image, so it needs write access to the folder (for `.history`) and to the files, e.g.:
 
 ```sh
