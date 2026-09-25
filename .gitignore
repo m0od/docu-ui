@@ -1,0 +1,17 @@
+# local tooling
+.idea/
+.vscode/
+.DS_Store
+
+# build output
+/dist/
+# built UI; .gitkeep stays so `go build` works before the web build
+/web/dist/*
+!/web/dist/.gitkeep
+/web/node_modules/
+/bin/
+
+# runtime data
+/data/
+*.env
+!*.env.example
