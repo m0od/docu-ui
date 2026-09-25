@@ -11,6 +11,9 @@ vi.mock('./api/env-files-api', () => ({
 vi.mock('./components/doco-cd-form', () => ({
   DocoCDForm: () => <p>doco-cd settings</p>,
 }))
+vi.mock('./components/shared-webhook-form', () => ({
+  SharedWebhookForm: () => <p>shared webhook settings</p>,
+}))
 vi.mock('./components/env-file-list', () => ({
   EnvFileList: () => <p>file list</p>,
 }))
@@ -50,6 +53,9 @@ describe('EnvFiles page', () => {
     await expect.element(screen.getByText('file list')).toBeInTheDocument()
     await expect
       .element(screen.getByText('doco-cd settings'))
+      .toBeInTheDocument()
+    await expect
+      .element(screen.getByText('shared webhook settings'))
       .toBeInTheDocument()
   })
 

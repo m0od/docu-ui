@@ -67,7 +67,7 @@ func TestFailedMigrationKeepsOldVersion(tester *testing.T) {
 // Rolling back to an older image must stop, not run against a schema it does not understand.
 func TestMigrateRefusesNewerDatabase(tester *testing.T) {
 	database := openRawDatabase(tester)
-	database.Exec(`PRAGMA user_version = 5`)
+	database.Exec(`PRAGMA user_version = 999`) // far beyond any shipped migration
 	if err := migrate(database, migrationFiles); err == nil || !strings.Contains(err.Error(), "newer Docu-UI") {
 		tester.Fatalf("got %v", err)
 	}

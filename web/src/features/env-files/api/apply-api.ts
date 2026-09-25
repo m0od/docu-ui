@@ -7,7 +7,33 @@ type DocoCDSettings = {
   hasApiKey: boolean
 }
 
-export type ApplyTarget = { project: string; services: string[] }
+export type ApplyAdapter = 'doco-cd' | 'webhook'
+
+// A webhook as the server shows it: whether secrets are set, never their values.
+export type WebhookView = {
+  // Empty in a file's target: the file uses the shared webhook.
+  url: string
+  hasSecret: boolean
+  headerName: string
+  hasHeaderValue: boolean
+}
+
+// A webhook as the page sends it; an empty secret or header value keeps the saved one.
+export type WebhookInput = {
+  url: string
+  secret: string
+  headerName: string
+  headerValue: string
+}
+
+export type ApplyTarget = {
+  adapter: ApplyAdapter
+  project: string
+  services: string[]
+  webhook: WebhookView
+}
+
+type ApplyTargetInput = Omit<ApplyTarget, 'webhook'> & { webhook: WebhookInput }
 
 type ApplyState = {
   // null until the user says which project and services use this file.
@@ -28,6 +54,14 @@ export function saveDocoCD(
   return sendJson('PUT', 'api/settings/doco-cd', { url, apiKey })
 }
 
+export function fetchSharedWebhook(): Promise<WebhookView> {
+  return requestJson('api/settings/webhook')
+}
+
+export function saveSharedWebhook(webhook: WebhookInput): Promise<WebhookView> {
+  return sendJson('PUT', 'api/settings/webhook', webhook)
+}
+
 function applyUrl(fileName: string, path: string): string {
   return `api/env-files/${encodeURIComponent(fileName)}/${path}`
 }
@@ -38,7 +72,7 @@ export function fetchApplyState(fileName: string): Promise<ApplyState> {
 
 export function saveApplyTarget(
   fileName: string,
-  target: ApplyTarget
+  target: ApplyTargetInput
 ): Promise<ApplyState> {
   return sendJson('PUT', applyUrl(fileName, 'apply-target'), target)
 }

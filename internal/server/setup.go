@@ -30,6 +30,8 @@ type Store interface {
 	SetEnvFolder(ctx context.Context, folder string) error
 	DocoCD(ctx context.Context) (store.DocoCD, error)
 	SetDocoCD(ctx context.Context, settings store.DocoCD) error
+	Webhook(ctx context.Context) (store.Webhook, error)
+	SetWebhook(ctx context.Context, webhook store.Webhook) error
 	ApplyTarget(ctx context.Context, fileName string) (store.ApplyTarget, error)
 	SetApplyTarget(ctx context.Context, fileName string, target store.ApplyTarget) error
 }
