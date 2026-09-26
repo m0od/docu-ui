@@ -17,8 +17,8 @@ export function Setup() {
             Welcome to Docu-UI
           </CardTitle>
           <CardDescription>
-            No account exists yet. Create the admin account to finish setup.
-            This page closes once the account is created.
+            No account exists yet. Create the admin account, or run without
+            sign-in on a personal machine. This page closes once setup is done.
           </CardDescription>
         </CardHeader>
         <CardContent>
