@@ -55,10 +55,13 @@ describe('session-api', () => {
     await expect(signIn(credentials)).rejects.toThrow('offline')
   })
 
-  it('fetchCurrentUser returns the signed-in username', async () => {
-    mockFetch(Response.json({ username: 'admin' }))
+  it('fetchCurrentUser returns the user and whether sign-in is on', async () => {
+    mockFetch(Response.json({ username: 'anonymous', signIn: false }))
 
-    await expect(fetchCurrentUser()).resolves.toBe('admin')
+    await expect(fetchCurrentUser()).resolves.toEqual({
+      username: 'anonymous',
+      signIn: false,
+    })
   })
 
   // No session is normal (first visit, expired): the guard redirects, no crash.

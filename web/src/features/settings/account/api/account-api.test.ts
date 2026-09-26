@@ -5,6 +5,8 @@ import {
   enableTotp,
   fetchAccount,
   fetchAccountTotpSecret,
+  turnOffSignIn,
+  turnOnSignIn,
 } from './account-api'
 
 function mockFetch(responseBody: unknown) {
@@ -35,6 +37,8 @@ describe('account-api', () => {
     await changePassword('old-password', 'a-new-long-password')
     await enableTotp({ currentPassword: 'pw', secret: 'S', code: '123456' })
     await disableTotp({ currentPassword: 'pw', code: '654321' })
+    await turnOnSignIn('admin', 'a-long-password')
+    await turnOffSignIn({ currentPassword: 'pw', code: '' })
 
     expect(
       fetchSpy.mock.calls.map(([url, init]) => [url, init?.method, init?.body])
@@ -53,6 +57,16 @@ describe('account-api', () => {
         'api/account/totp/disable',
         'POST',
         '{"currentPassword":"pw","code":"654321"}',
+      ],
+      [
+        'api/account/sign-in',
+        'POST',
+        '{"username":"admin","password":"a-long-password"}',
+      ],
+      [
+        'api/account/sign-in/disable',
+        'POST',
+        '{"currentPassword":"pw","code":""}',
       ],
     ])
   })

@@ -14,15 +14,15 @@ export const Route = createFileRoute('/_authenticated')({
     if (auth.user) {
       return
     }
-    const username = await fetchCurrentUser()
-    if (!username) {
+    const currentUser = await fetchCurrentUser()
+    if (!currentUser) {
       throw redirect({
         to: '/sign-in',
         search: { redirect: location.href },
         replace: true,
       })
     }
-    auth.setUser({ username })
+    auth.setUser(currentUser)
   },
   component: AuthenticatedLayout,
 })

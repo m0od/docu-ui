@@ -75,7 +75,7 @@ export function UserAuthForm({
         form.setError('root', { message: result.message })
         return
       }
-      auth.setUser({ username: result.username })
+      auth.setUser({ username: result.username, signIn: true })
       navigate({ to: safeRedirectPath(redirectTo), replace: true })
     } catch (error) {
       // A used or wrong code cannot be retried; clear it for the next one.

@@ -28,6 +28,11 @@ export async function createFirstAccount(
   await postJson('api/setup', input)
 }
 
+// skipSignIn finishes setup without an account: Docu-UI then opens without sign-in.
+export async function skipSignIn(setupToken: string): Promise<void> {
+  await postJson('api/setup', { setupToken, skipSignIn: true })
+}
+
 // otpauthUri builds the link authenticator apps read from the QR code.
 export function otpauthUri(username: string, secret: string): string {
   const issuer = 'Docu-UI'

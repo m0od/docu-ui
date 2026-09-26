@@ -30,12 +30,14 @@ export async function signIn(input: SignInInput): Promise<SignInResult> {
   }
 }
 
-// fetchCurrentUser returns the signed-in username, or null when there is no
+// CurrentUser.signIn is false when Docu-UI runs without sign-in; username is then "anonymous".
+type CurrentUser = { username: string; signIn: boolean }
+
+// fetchCurrentUser returns who is using Docu-UI, or null when there is no
 // valid session (never signed in, expired, or signed out elsewhere).
-export async function fetchCurrentUser(): Promise<string | null> {
+export async function fetchCurrentUser(): Promise<CurrentUser | null> {
   try {
-    const account = await requestJson<{ username: string }>('api/auth/me')
-    return account.username
+    return await requestJson<CurrentUser>('api/auth/me')
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) {
       return null

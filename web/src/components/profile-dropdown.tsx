@@ -17,6 +17,8 @@ import { SignOutDialog } from '@/components/sign-out-dialog'
 export function ProfileDropdown() {
   const [open, setOpen] = useDialogState()
   const username = useAuthStore((state) => state.auth.user?.username ?? '')
+  // Nothing to sign out of while sign-in is off.
+  const signInOn = useAuthStore((state) => state.auth.user?.signIn !== false)
 
   return (
     <>
@@ -43,10 +45,17 @@ export function ProfileDropdown() {
               <Link to='/settings'>Settings</Link>
             </DropdownMenuItem>
           </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant='destructive' onClick={() => setOpen(true)}>
-            Sign out
-          </DropdownMenuItem>
+          {signInOn && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant='destructive'
+                onClick={() => setOpen(true)}
+              >
+                Sign out
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

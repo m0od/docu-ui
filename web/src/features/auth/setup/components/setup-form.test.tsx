@@ -4,6 +4,7 @@ import { userEvent } from 'vitest/browser'
 import {
   createFirstAccount,
   fetchTotpSecret,
+  skipSignIn,
 } from '@/features/auth/setup/api/setup-api'
 import { SetupForm } from './setup-form'
 
@@ -21,10 +22,13 @@ vi.mock('@/features/auth/setup/api/setup-api', async (original) => {
     ...actual,
     createFirstAccount: vi.fn(),
     fetchTotpSecret: vi.fn(),
+    skipSignIn: vi.fn(),
   }
 })
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
+}))
 
 const TOTP_SECRET = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'
 
@@ -124,6 +128,18 @@ describe('SetupForm', () => {
     )
   })
 
+  // Turning TOTP off and on again must keep the QR code already scanned.
+  it('keeps the same secret when TOTP is switched off and on', async () => {
+    vi.mocked(fetchTotpSecret).mockResolvedValueOnce(TOTP_SECRET)
+    await userEvent.click(screen.getByRole('switch'))
+    await expect.element(screen.getByText(TOTP_SECRET)).toBeVisible()
+    await userEvent.click(screen.getByRole('switch'))
+    await userEvent.click(screen.getByRole('switch'))
+
+    await expect.element(screen.getByText(TOTP_SECRET)).toBeVisible()
+    expect(fetchTotpSecret).toHaveBeenCalledTimes(1)
+  })
+
   it('turns the switch back off when the secret cannot be fetched', async () => {
     vi.mocked(fetchTotpSecret).mockRejectedValueOnce(
       new Error('setup already completed')
@@ -131,5 +147,90 @@ describe('SetupForm', () => {
     await userEvent.click(screen.getByRole('switch'))
 
     await expect.element(screen.getByRole('switch')).not.toBeChecked()
+  })
+
+  // Skipping sign-in still needs the token, but no account fields: those would only be ignored.
+  it('finishes setup without sign-in after a clear warning', async () => {
+    vi.mocked(skipSignIn).mockResolvedValueOnce()
+    await userEvent.click(screen.getByRole('checkbox'))
+
+    await expect
+      .element(screen.getByRole('alert'))
+      .toHaveTextContent('anyone who reaches this URL can read')
+    await expect
+      .element(screen.getByLabelText('Username'))
+      .not.toBeInTheDocument()
+    await userEvent.fill(
+      screen.getByLabelText('Setup token'),
+      ' token-from-log '
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: /Finish setup without sign-in/ })
+    )
+
+    await vi.waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith({ to: '/', replace: true })
+    )
+    expect(skipSignIn).toHaveBeenCalledWith('token-from-log')
+    expect(createFirstAccount).not.toHaveBeenCalled()
+  })
+
+  it('shows why skipping sign-in failed', async () => {
+    vi.mocked(skipSignIn).mockRejectedValueOnce(
+      new Error('setup token is wrong: copy it from the server log')
+    )
+    await userEvent.click(screen.getByRole('checkbox'))
+    await userEvent.fill(screen.getByLabelText('Setup token'), 'wrong')
+    await userEvent.click(
+      screen.getByRole('button', { name: /Finish setup without sign-in/ })
+    )
+
+    await expect
+      .element(
+        screen.getByText('setup token is wrong: copy it from the server log')
+      )
+      .toBeInTheDocument()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  // Unticking brings the account fields back, with their rules.
+  it('asks for the account again after unticking', async () => {
+    await userEvent.click(screen.getByRole('checkbox'))
+    await userEvent.click(screen.getByRole('checkbox'))
+    await userEvent.fill(screen.getByLabelText('Setup token'), 'token')
+    await userEvent.fill(screen.getByLabelText('Username'), 'a')
+    await userEvent.click(
+      screen.getByRole('button', { name: /Create admin account/ })
+    )
+
+    await expect
+      .element(
+        screen.getByText('Use 3-64 letters, digits, dot, dash or underscore.')
+      )
+      .toBeInTheDocument()
+    await expect
+      .element(
+        screen.getByText('Password must be at least 12 characters long.')
+      )
+      .toBeInTheDocument()
+    await expect
+      .element(screen.getByText('Please confirm your password.'))
+      .toBeInTheDocument()
+  })
+
+  it('rejects a password over 256 characters', async () => {
+    await userEvent.fill(
+      screen.getByLabelText('Password', { exact: true }),
+      'x'.repeat(257)
+    )
+    await userEvent.click(
+      screen.getByRole('button', { name: /Create admin account/ })
+    )
+
+    await expect
+      .element(
+        screen.getByText('Password must be at most 256 characters long.')
+      )
+      .toBeInTheDocument()
   })
 })

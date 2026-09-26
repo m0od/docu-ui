@@ -86,7 +86,7 @@ describe('UserAuthForm', () => {
       password: 'correct horse battery',
       totpCode: '',
     })
-    expect(setUser).toHaveBeenCalledWith({ username: 'admin' })
+    expect(setUser).toHaveBeenCalledWith({ username: 'admin', signIn: true })
   })
 
   it('returns to the page the user was on before the session ran out', async () => {

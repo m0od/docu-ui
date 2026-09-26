@@ -17,7 +17,7 @@ vi.mock('@/components/sign-out-dialog', () => ({
 
 describe('ProfileDropdown', () => {
   beforeEach(() => {
-    useAuthStore.getState().auth.setUser({ username: 'admin' })
+    useAuthStore.getState().auth.setUser({ username: 'admin', signIn: true })
   })
 
   // No template Billing or New Team, and no shortcut hints that no key handler backs.
@@ -36,6 +36,21 @@ describe('ProfileDropdown', () => {
     await expect
       .element(screen.getByText('sign out dialog'))
       .toBeInTheDocument()
+  })
+
+  it('offers no sign out while sign-in is off', async () => {
+    useAuthStore
+      .getState()
+      .auth.setUser({ username: 'anonymous', signIn: false })
+    const screen = await render(<ProfileDropdown />)
+    await userEvent.click(screen.getByRole('button'))
+
+    const menuItems = screen.getByRole('menuitem')
+    await expect.element(menuItems.first()).toHaveTextContent('Account')
+    expect(menuItems.elements().map((item) => item.textContent)).toEqual([
+      'Account',
+      'Settings',
+    ])
   })
 
   // Before /api/auth/me answers there is no user yet; the menu must still render.
