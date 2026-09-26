@@ -36,6 +36,13 @@ func main() {
 		setupToken = auth.RandomToken(16)
 		slog.Warn("no account yet: open the UI and create the admin with this setup token", "setup_token", setupToken)
 	}
+	signInOff, err := accountStore.SignInOff(context.Background())
+	if err != nil {
+		fatal("read accounts", err)
+	}
+	if signInOff {
+		slog.Warn(server.SignInOffWarning)
+	}
 
 	handler, err := server.New(server.Config{
 		BasePath:   os.Getenv("DOCU_BASE_PATH"),

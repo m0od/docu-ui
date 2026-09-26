@@ -338,3 +338,35 @@ func (failing failingStore) SetTOTP(ctx context.Context, accountID int64, secret
 	}
 	return failing.Store.SetTOTP(ctx, accountID, secret, lastStep)
 }
+
+func (failing failingStore) SignInOff(ctx context.Context) (bool, error) {
+	if failing.failingMethod == "SignInOff" {
+		return false, errStoreDown
+	}
+	return failing.Store.SignInOff(ctx)
+}
+
+func (failing failingStore) TurnOffSignIn(ctx context.Context) error {
+	if failing.failingMethod == "TurnOffSignIn" {
+		return errStoreDown
+	}
+	return failing.Store.TurnOffSignIn(ctx)
+}
+
+func (failing failingStore) CreateFirstAccount(ctx context.Context, username, passwordHash, totpSecret string) error {
+	switch failing.failingMethod {
+	case "CreateFirstAccount":
+		return errStoreDown
+	case "CreateFirstAccountRace":
+		// Another request created the account between the check and the insert.
+		return store.ErrSetupDone
+	}
+	return failing.Store.CreateFirstAccount(ctx, username, passwordHash, totpSecret)
+}
+
+func (failing failingStore) FindSessionUsername(ctx context.Context, tokenHash string, currentTime time.Time) (string, error) {
+	if failing.failingMethod == "FindSessionUsername" {
+		return "", errStoreDown
+	}
+	return failing.Store.FindSessionUsername(ctx, tokenHash, currentTime)
+}

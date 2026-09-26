@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -22,7 +23,15 @@ const (
 	maxFailedLogins  = 5
 	loginLockoutTime = 15 * time.Minute
 	invalidLogin     = "invalid username or password"
+	// anonymousUser is who history and logs name when sign-in is off.
+	anonymousUser = "anonymous"
 )
+
+// SignInOffWarning is logged at start and whenever sign-in is turned off.
+const SignInOffWarning = "sign-in is off: anyone who reaches Docu-UI can read and change every env file"
+
+// signInOffKey marks a request let through because sign-in is off, not because of a session.
+type signInOffKey struct{}
 
 // dummyPasswordHash is checked when the username does not exist, so a wrong username takes as
 // long as a wrong password and response time does not reveal which usernames exist.
@@ -44,8 +53,8 @@ type authHandlers struct {
 func (handlers authHandlers) register(routes *http.ServeMux) {
 	routes.HandleFunc("POST /api/auth/login", handlers.signIn)
 	routes.HandleFunc("POST /api/auth/logout", handlers.signOut)
-	routes.Handle("GET /api/auth/me", handlers.requireSession(func(writer http.ResponseWriter, _ *http.Request, username string) {
-		writeJSON(writer, http.StatusOK, map[string]string{"username": username})
+	routes.Handle("GET /api/auth/me", handlers.requireSession(func(writer http.ResponseWriter, request *http.Request, username string) {
+		writeJSON(writer, http.StatusOK, map[string]any{"username": username, "signIn": !isSignInOff(request)})
 	}))
 	handlers.registerAccount(routes)
 }
@@ -134,15 +143,29 @@ func (handlers authHandlers) signOut(writer http.ResponseWriter, request *http.R
 			return
 		}
 	}
-	expiredCookie := handlers.sessionCookie("", time.Unix(0, 0))
-	expiredCookie.MaxAge = -1
-	http.SetCookie(writer, expiredCookie)
+	handlers.clearSessionCookie(writer)
 	writer.WriteHeader(http.StatusNoContent)
 }
 
+func (handlers authHandlers) clearSessionCookie(writer http.ResponseWriter) {
+	expiredCookie := handlers.sessionCookie("", time.Unix(0, 0))
+	expiredCookie.MaxAge = -1
+	http.SetCookie(writer, expiredCookie)
+}
+
 // requireSession runs next with the signed-in username, or answers 401.
+// With sign-in off, every request goes through as anonymousUser.
 func (handlers authHandlers) requireSession(next func(http.ResponseWriter, *http.Request, string)) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		signInOff, err := handlers.store.SignInOff(request.Context())
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, "cannot read accounts")
+			return
+		}
+		if signInOff {
+			next(writer, request.WithContext(context.WithValue(request.Context(), signInOffKey{}, true)), anonymousUser)
+			return
+		}
 		sessionCookie, err := request.Cookie(sessionCookieName)
 		if err != nil {
 			writeError(writer, http.StatusUnauthorized, "not signed in")
@@ -159,6 +182,10 @@ func (handlers authHandlers) requireSession(next func(http.ResponseWriter, *http
 		}
 		next(writer, request, username)
 	})
+}
+
+func isSignInOff(request *http.Request) bool {
+	return request.Context().Value(signInOffKey{}) != nil
 }
 
 // sessionCookie is HttpOnly (no JavaScript access) and SameSite=Strict (never sent from other sites).
