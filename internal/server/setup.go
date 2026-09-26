@@ -26,6 +26,9 @@ type Store interface {
 	CreateSession(ctx context.Context, tokenHash string, accountID int64, now, expiresAt time.Time) error
 	FindSessionUsername(ctx context.Context, tokenHash string, now time.Time) (string, error)
 	DeleteSession(ctx context.Context, tokenHash string) error
+	DeleteOtherSessions(ctx context.Context, accountID int64, keepTokenHash string) error
+	SetPassword(ctx context.Context, accountID int64, passwordHash string) error
+	SetTOTP(ctx context.Context, accountID int64, secret string, lastStep int64) error
 	EnvFolder(ctx context.Context) (string, error)
 	SetEnvFolder(ctx context.Context, folder string) error
 	DocoCD(ctx context.Context) (store.DocoCD, error)
@@ -134,9 +137,8 @@ func validateSetup(setupInput setupRequest) string {
 	if !usernamePattern.MatchString(setupInput.Username) {
 		return "username must be 3-64 characters: letters, digits, dot, dash, underscore"
 	}
-	passwordLength := utf8.RuneCountInString(setupInput.Password)
-	if passwordLength < minPasswordLength || passwordLength > maxPasswordLength {
-		return "password must be 12-256 characters"
+	if !isValidPasswordLength(setupInput.Password) {
+		return passwordLengthProblem
 	}
 	if setupInput.TOTPSecret == "" {
 		return ""
@@ -148,6 +150,13 @@ func validateSetup(setupInput setupRequest) string {
 		return "TOTP code does not match: check the time on your phone and try the next code"
 	}
 	return ""
+}
+
+const passwordLengthProblem = "password must be 12-256 characters"
+
+func isValidPasswordLength(password string) bool {
+	passwordLength := utf8.RuneCountInString(password)
+	return passwordLength >= minPasswordLength && passwordLength <= maxPasswordLength
 }
 
 // decodeJSON reads a JSON request body into target, or answers 415/400 and returns false.

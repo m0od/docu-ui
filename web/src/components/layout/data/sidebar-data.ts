@@ -1,4 +1,11 @@
-import { FileKey, FolderOpen, Palette, Rocket, Settings } from 'lucide-react'
+import {
+  FileKey,
+  FolderOpen,
+  Palette,
+  Rocket,
+  Settings,
+  UserCog,
+} from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -29,6 +36,11 @@ export const sidebarData: SidebarData = {
               title: 'Apply',
               url: '/settings/apply',
               icon: Rocket,
+            },
+            {
+              title: 'Account',
+              url: '/settings/account',
+              icon: UserCog,
             },
             {
               title: 'Appearance',

@@ -47,6 +47,7 @@ func (handlers authHandlers) register(routes *http.ServeMux) {
 	routes.Handle("GET /api/auth/me", handlers.requireSession(func(writer http.ResponseWriter, _ *http.Request, username string) {
 		writeJSON(writer, http.StatusOK, map[string]string{"username": username})
 	}))
+	handlers.registerAccount(routes)
 }
 
 func (handlers authHandlers) signIn(writer http.ResponseWriter, request *http.Request) {

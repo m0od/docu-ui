@@ -39,3 +39,10 @@ func (store *Store) DeleteSession(ctx context.Context, tokenHash string) error {
 	_, err := store.database.ExecContext(ctx, `DELETE FROM sessions WHERE token_hash = ?`, tokenHash)
 	return err
 }
+
+// DeleteOtherSessions ends every session of accountID except keepTokenHash, e.g. after a password change.
+func (store *Store) DeleteOtherSessions(ctx context.Context, accountID int64, keepTokenHash string) error {
+	_, err := store.database.ExecContext(ctx,
+		`DELETE FROM sessions WHERE account_id = ? AND token_hash != ?`, accountID, keepTokenHash)
+	return err
+}

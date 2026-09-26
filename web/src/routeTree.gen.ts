@@ -24,6 +24,7 @@ import { Route as AuthenticatedEnvFilesIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedSettingsEnvFolderRouteImport } from './routes/_authenticated/settings/env-folder'
 import { Route as AuthenticatedSettingsApplyRouteImport } from './routes/_authenticated/settings/apply'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
+import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedEnvFilesNameRouteImport } from './routes/_authenticated/env-files/$name'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
@@ -106,6 +107,12 @@ const AuthenticatedSettingsAppearanceRoute =
     path: '/appearance',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
+const AuthenticatedSettingsAccountRoute =
+  AuthenticatedSettingsAccountRouteImport.update({
+    id: '/account',
+    path: '/account',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
+  } as any)
 const AuthenticatedEnvFilesNameRoute =
   AuthenticatedEnvFilesNameRouteImport.update({
     id: '/env-files/$name',
@@ -124,6 +131,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/env-files/$name': typeof AuthenticatedEnvFilesNameRoute
+  '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/apply': typeof AuthenticatedSettingsApplyRoute
   '/settings/env-folder': typeof AuthenticatedSettingsEnvFolderRoute
@@ -140,6 +148,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
   '/env-files/$name': typeof AuthenticatedEnvFilesNameRoute
+  '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/apply': typeof AuthenticatedSettingsApplyRoute
   '/settings/env-folder': typeof AuthenticatedSettingsEnvFolderRoute
@@ -159,6 +168,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/env-files/$name': typeof AuthenticatedEnvFilesNameRoute
+  '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/apply': typeof AuthenticatedSettingsApplyRoute
   '/_authenticated/settings/env-folder': typeof AuthenticatedSettingsEnvFolderRoute
@@ -178,6 +188,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/env-files/$name'
+    | '/settings/account'
     | '/settings/appearance'
     | '/settings/apply'
     | '/settings/env-folder'
@@ -194,6 +205,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/'
     | '/env-files/$name'
+    | '/settings/account'
     | '/settings/appearance'
     | '/settings/apply'
     | '/settings/env-folder'
@@ -212,6 +224,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/'
     | '/_authenticated/env-files/$name'
+    | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/apply'
     | '/_authenticated/settings/env-folder'
@@ -337,6 +350,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsAppearanceRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
+    '/_authenticated/settings/account': {
+      id: '/_authenticated/settings/account'
+      path: '/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof AuthenticatedSettingsAccountRouteImport
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
+    }
     '/_authenticated/env-files/$name': {
       id: '/_authenticated/env-files/$name'
       path: '/env-files/$name'
@@ -348,6 +368,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedSettingsRouteRouteChildren {
+  AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppearanceRoute: typeof AuthenticatedSettingsAppearanceRoute
   AuthenticatedSettingsApplyRoute: typeof AuthenticatedSettingsApplyRoute
   AuthenticatedSettingsEnvFolderRoute: typeof AuthenticatedSettingsEnvFolderRoute
@@ -356,6 +377,7 @@ interface AuthenticatedSettingsRouteRouteChildren {
 
 const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteChildren =
   {
+    AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
     AuthenticatedSettingsAppearanceRoute: AuthenticatedSettingsAppearanceRoute,
     AuthenticatedSettingsApplyRoute: AuthenticatedSettingsApplyRoute,
     AuthenticatedSettingsEnvFolderRoute: AuthenticatedSettingsEnvFolderRoute,

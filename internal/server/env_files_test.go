@@ -71,6 +71,11 @@ func TestEnvRoutesRequireSession(tester *testing.T) {
 		{http.MethodGet, "/api/env-files/keycloak.env/apply-target"},
 		{http.MethodPut, "/api/env-files/keycloak.env/apply-target"},
 		{http.MethodPost, "/api/env-files/keycloak.env/apply"},
+		{http.MethodGet, "/api/account"},
+		{http.MethodPut, "/api/account/password"},
+		{http.MethodGet, "/api/account/totp-secret"},
+		{http.MethodPost, "/api/account/totp"},
+		{http.MethodPost, "/api/account/totp/disable"},
 	}
 	for _, route := range routes {
 		if response := sendJSON(handler, route[0], route[1], envFolderBody("/tmp")); response.Code != http.StatusUnauthorized {
