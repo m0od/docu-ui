@@ -32,7 +32,7 @@ describe('NavUser', () => {
   }
 
   // Only entries that lead somewhere real: no template Billing, Upgrade or Notifications.
-  it('offers the account page and sign out only', async () => {
+  it('offers settings and sign out only', async () => {
     const screen = await renderNavUser()
     await userEvent.click(screen.getByRole('button', { name: /admin/ }))
 
@@ -40,12 +40,10 @@ describe('NavUser', () => {
       .element(screen.getByRole('menu'))
       .toHaveAttribute('data-side', 'right')
     const menuItems = screen.getByRole('menuitem')
-    await expect.element(menuItems.first()).toHaveTextContent('Account')
+    await expect.element(menuItems.first()).toHaveTextContent('Settings')
     await expect.element(menuItems.last()).toHaveTextContent('Sign out')
     expect(menuItems.elements()).toHaveLength(2)
-    await expect
-      .element(menuItems.first())
-      .toHaveAttribute('href', '/settings/account')
+    await expect.element(menuItems.first()).toHaveAttribute('href', '/settings')
 
     await userEvent.click(menuItems.last())
     await expect

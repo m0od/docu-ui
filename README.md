@@ -39,7 +39,7 @@ The setup page closes for good once the first account exists; a new token is pri
 
 ## Env files
 
-After signing in, open **Env files** and enter the folder that holds your `*.env` files.
+After signing in, open **Settings → Env folder** and enter the folder that holds your `*.env` files; **Env files** then lists them.
 The folder is saved in the database and applies at once — no env var, no restart.
 It is a path **inside the container**, so mount the host folder first:
 
@@ -81,7 +81,7 @@ Docu-UI asks [Doco-CD](https://doco.cd) to recreate the services through its RES
 which reloads the Compose project, so the new `env_file` values reach the containers.
 
 1. Enable the Doco-CD API by setting `API_SECRET` (or `API_SECRET_FILE`) on the Doco-CD container.
-2. On the **Env files** page, enter the Doco-CD URL as Docu-UI reaches it (e.g. `http://doco-cd:80` on a shared Docker network) and the API secret.
+2. In **Settings → Apply**, enter the Doco-CD URL as Docu-UI reaches it (e.g. `http://doco-cd:80` on a shared Docker network) and the API secret.
    The secret is stored in `/data/docu-ui.db` and never sent back to the browser.
 3. On a file's page, say which Compose project and services use it (no services: the whole project).
 
@@ -110,7 +110,7 @@ services:
 
 #### Webhook
 
-Set a **shared webhook** once on the **Env files** page; a file can also have **its own webhook**, which then replaces the shared one entirely (URL, secret and header).
+Set a **shared webhook** once in **Settings → Apply**; a file can also have **its own webhook**, which then replaces the shared one entirely (URL, secret and header).
 On Apply, Docu-UI sends a `POST` with this JSON body. It never contains env values, only which file changed:
 
 ```json
