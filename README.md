@@ -73,7 +73,7 @@ Without it, saving fails with `permission denied` and the file is left untouched
 ### Applying
 
 Saving only changes the file; running containers keep the old values until they are recreated.
-Each file picks how that happens: **Doco-CD** recreates the services, or a **webhook** hands the job to your own CI/CD.
+Each file picks how that happens: **Doco-CD** or **Docker Compose** recreates the services, or a **webhook** hands the job to your own CI/CD.
 
 #### Doco-CD
 
@@ -84,6 +84,29 @@ which reloads the Compose project, so the new `env_file` values reach the contai
 2. On the **Env files** page, enter the Doco-CD URL as Docu-UI reaches it (e.g. `http://doco-cd:80` on a shared Docker network) and the API secret.
    The secret is stored in `/data/docu-ui.db` and never sent back to the browser.
 3. On a file's page, say which Compose project and services use it (no services: the whole project).
+
+#### Docker Compose
+
+Docu-UI runs `docker compose up --detach --force-recreate --no-deps <services>` itself; the image ships the Docker CLI and Compose plugin.
+Compose re-reads every `env_file` while recreating, so the containers start with the saved values.
+You only enter the project name: Docu-UI finds the compose files, working directory and project `.env`
+in the `com.docker.compose.project.*` labels of the project's containers, so the project must have been started once with `docker compose`.
+
+```yaml
+services:
+  docu-ui:
+    image: ghcr.io/m0od/docu-ui
+    group_add: ["988"]                            # group of the socket: stat -c %g /var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/textiq:/opt/textiq                   # the compose project, at the SAME path as on the host
+      - docu-data:/data
+```
+
+- **Same path inside and outside.** Compose runs inside Docu-UI but the host's Docker creates the containers.
+  A relative bind such as `./data` becomes `/opt/textiq/data`, which the host must have; mounted elsewhere, the host gets a path that does not exist and creates an empty directory.
+- **The socket is root on the host.** Anyone who can use Docu-UI can then run any container. Mount it only where that is acceptable (a dev machine), or use Doco-CD or a webhook instead.
+- A remote Docker also works: set `DOCKER_HOST` (e.g. `ssh://user@host`) on the container instead of mounting the socket; the compose files must still be at the same paths.
 
 #### Webhook
 

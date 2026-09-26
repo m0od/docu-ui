@@ -373,6 +373,43 @@ describe('ApplyPanel', () => {
       .toBeDisabled()
   })
 
+  // Compose finds the containers by project name, so the project is required.
+  it('applies through Docker Compose on this host', async () => {
+    const composeTarget = {
+      adapter: 'compose' as const,
+      project: 'textiq-dev',
+      services: ['keycloak'],
+      webhook: NO_WEBHOOK,
+    }
+    vi.mocked(fetchApplyState).mockResolvedValueOnce({
+      target: null,
+      appliedVersion: '',
+    })
+    vi.mocked(saveApplyTarget).mockResolvedValueOnce({
+      target: composeTarget,
+      appliedVersion: 'version-1',
+    })
+    const screen = await renderPanel()
+    await userEvent.click(screen.getByRole('radio', { name: /Docker Compose/ }))
+    const saveButton = screen.getByRole('button', { name: 'Save' })
+    await expect.element(saveButton).toBeDisabled()
+    await userEvent.fill(screen.getByLabelText('Compose project'), 'textiq-dev')
+    await userEvent.fill(screen.getByLabelText('Services'), 'keycloak')
+    await userEvent.click(saveButton)
+
+    expect(saveApplyTarget).toHaveBeenCalledWith('keycloak.env', {
+      ...composeTarget,
+      webhook: NO_WEBHOOK_INPUT,
+    })
+    await expect
+      .element(screen.getByText('via Docker Compose'))
+      .toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await expect
+      .element(screen.getByRole('alertdialog'))
+      .toHaveTextContent('Docker Compose recreates keycloak in textiq-dev')
+  })
+
   it('shows why the target cannot be read', async () => {
     vi.mocked(fetchApplyState).mockRejectedValueOnce(
       new Error('cannot read settings')
