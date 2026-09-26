@@ -4,12 +4,6 @@ import { Loader2, ShieldCheck, ShieldOff } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSeparator,
-  InputOTPSlot,
-} from '@/components/ui/input-otp'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/password-input'
 import { otpauthUri } from '@/features/auth/setup/api/setup-api'
@@ -18,6 +12,7 @@ import {
   enableTotp,
   fetchAccountTotpSecret,
 } from '../api/account-api'
+import { TotpCodeInput } from './totp-code-input'
 
 type TwoFactorSectionProps = {
   username: string
@@ -117,24 +112,7 @@ export function TwoFactorSection({
             onChange={(event) => setCurrentPassword(event.target.value)}
           />
           <Label htmlFor='totp-code'>Code from the app</Label>
-          <InputOTP
-            id='totp-code'
-            maxLength={6}
-            value={code}
-            onChange={setCode}
-          >
-            <InputOTPGroup>
-              <InputOTPSlot index={0} />
-              <InputOTPSlot index={1} />
-              <InputOTPSlot index={2} />
-            </InputOTPGroup>
-            <InputOTPSeparator />
-            <InputOTPGroup>
-              <InputOTPSlot index={3} />
-              <InputOTPSlot index={4} />
-              <InputOTPSlot index={5} />
-            </InputOTPGroup>
-          </InputOTP>
+          <TotpCodeInput id='totp-code' value={code} onChange={setCode} />
           <div className='flex gap-2'>
             <Button
               type='submit'

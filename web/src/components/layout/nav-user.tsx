@@ -23,6 +23,8 @@ import { SignOutDialog } from '@/components/sign-out-dialog'
 export function NavUser() {
   const { isMobile } = useSidebar()
   const username = useAuthStore((state) => state.auth.user?.username ?? '')
+  // Nothing to sign out of while sign-in is off.
+  const signInOn = useAuthStore((state) => state.auth.user?.signIn !== false)
   const [open, setOpen] = useDialogState()
 
   return (
@@ -79,14 +81,18 @@ export function NavUser() {
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant='destructive'
-                onClick={() => setOpen(true)}
-              >
-                <LogOut />
-                Sign out
-              </DropdownMenuItem>
+              {signInOn && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant='destructive'
+                    onClick={() => setOpen(true)}
+                  >
+                    <LogOut />
+                    Sign out
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarMenuItem>

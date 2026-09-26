@@ -20,7 +20,7 @@ describe('NavUser', () => {
   beforeEach(async () => {
     // Desktop by default; below 768px the sidebar switches to its phone layout.
     await page.viewport(1280, 800)
-    useAuthStore.getState().auth.setUser({ username: 'admin' })
+    useAuthStore.getState().auth.setUser({ username: 'admin', signIn: true })
   })
 
   function renderNavUser() {
@@ -54,6 +54,21 @@ describe('NavUser', () => {
     await expect
       .element(screen.getByText('sign out dialog'))
       .toBeInTheDocument()
+  })
+
+  it('offers no sign out while sign-in is off', async () => {
+    useAuthStore
+      .getState()
+      .auth.setUser({ username: 'anonymous', signIn: false })
+    const screen = await renderNavUser()
+    await userEvent.click(screen.getByRole('button', { name: /anonymous/ }))
+
+    const menuItems = screen.getByRole('menuitem')
+    await expect.element(menuItems.first()).toHaveTextContent('Account')
+    expect(menuItems.elements().map((item) => item.textContent)).toEqual([
+      'Account',
+      'Settings',
+    ])
   })
 
   // On a phone the sidebar fills the screen; a menu to its right would open off-screen.

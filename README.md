@@ -40,6 +40,15 @@ The setup page closes for good once the first account exists; a new token is pri
 Later, **Settings → Account** changes the password (other sessions are signed out) and turns TOTP on or off.
 Both need the current password; turning TOTP off also needs a code.
 
+### Without sign-in
+
+On a personal machine, tick **Don't set up sign-in** on the setup page (the setup token is still needed).
+Docu-UI then opens without signing in, shows a red banner on every page, and logs a warning at each start.
+**Anyone who reaches the URL can read and change every env file** (and run containers, if the Docker socket is mounted), so only use it where nobody else can reach Docu-UI.
+
+**Settings → Account** switches later: *Turn on sign-in* creates the account;
+*Turn off sign-in* needs the password (and a code when TOTP is on) and deletes the account and its sessions.
+
 ## Env files
 
 After signing in, open **Settings → Env folder** and enter the folder that holds your `*.env` files; **Env files** then lists them.
