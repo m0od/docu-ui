@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"mime"
 	"net/http"
 	"regexp"
@@ -18,6 +19,9 @@ import (
 // Store is the persistence the HTTP layer needs (implemented by internal/store).
 type Store interface {
 	NeedsSetup(ctx context.Context) (bool, error)
+	SignInOff(ctx context.Context) (bool, error)
+	SkipSignIn(ctx context.Context) error
+	TurnOffSignIn(ctx context.Context) error
 	CreateFirstAccount(ctx context.Context, username, passwordHash, totpSecret string) error
 	FindAccount(ctx context.Context, username string) (store.Account, error)
 	RecordFailedLogin(ctx context.Context, accountID int64, maxFailures int, lockUntil time.Time) error
@@ -57,6 +61,8 @@ type setupRequest struct {
 	// TOTPSecret is empty when the admin skips two-factor; otherwise TOTPCode must prove the app was set up.
 	TOTPSecret string `json:"totpSecret"`
 	TOTPCode   string `json:"totpCode"`
+	// SkipSignIn runs Docu-UI without sign-in; the other fields are then ignored. The token is still needed.
+	SkipSignIn bool `json:"skipSignIn"`
 }
 
 type setupHandlers struct {
@@ -101,6 +107,10 @@ func (handlers setupHandlers) createFirstAccount(writer http.ResponseWriter, req
 		writeError(writer, http.StatusForbidden, "setup token is wrong: copy it from the server log")
 		return
 	}
+	if setupInput.SkipSignIn {
+		handlers.skipSignIn(writer, request)
+		return
+	}
 	if message := validateSetup(setupInput); message != "" {
 		writeError(writer, http.StatusBadRequest, message)
 		return
@@ -116,6 +126,20 @@ func (handlers setupHandlers) createFirstAccount(writer http.ResponseWriter, req
 		return
 	}
 	writeJSON(writer, http.StatusCreated, map[string]string{"username": setupInput.Username})
+}
+
+func (handlers setupHandlers) skipSignIn(writer http.ResponseWriter, request *http.Request) {
+	err := handlers.accounts.SkipSignIn(request.Context())
+	if errors.Is(err, store.ErrSetupDone) {
+		writeError(writer, http.StatusConflict, "setup already completed")
+		return
+	}
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, "cannot save setup")
+		return
+	}
+	slog.Warn(SignInOffWarning)
+	writeJSON(writer, http.StatusCreated, map[string]bool{"signIn": false})
 }
 
 // setupOpen writes the error response and returns false once an account exists.

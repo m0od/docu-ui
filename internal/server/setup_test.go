@@ -25,10 +25,19 @@ type fakeAccounts struct {
 	createdTOTPSecret string
 	readError         error
 	writeError        error
+	signInSkipped     bool
 }
 
 func (accounts *fakeAccounts) NeedsSetup(context.Context) (bool, error) {
 	return accounts.createdUsername == "", accounts.readError
+}
+
+func (accounts *fakeAccounts) SkipSignIn(context.Context) error {
+	if accounts.writeError != nil {
+		return accounts.writeError
+	}
+	accounts.signInSkipped = true
+	return nil
 }
 
 func (accounts *fakeAccounts) CreateFirstAccount(_ context.Context, username, passwordHash, totpSecret string) error {

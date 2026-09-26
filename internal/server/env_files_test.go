@@ -76,6 +76,8 @@ func TestEnvRoutesRequireSession(tester *testing.T) {
 		{http.MethodGet, "/api/account/totp-secret"},
 		{http.MethodPost, "/api/account/totp"},
 		{http.MethodPost, "/api/account/totp/disable"},
+		{http.MethodPost, "/api/account/sign-in"},
+		{http.MethodPost, "/api/account/sign-in/disable"},
 	}
 	for _, route := range routes {
 		if response := sendJSON(handler, route[0], route[1], envFolderBody("/tmp")); response.Code != http.StatusUnauthorized {
