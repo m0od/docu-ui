@@ -1,12 +1,4 @@
-import {
-  LayoutDashboard,
-  Monitor,
-  Palette,
-  Settings,
-  Wrench,
-  UserCog,
-  FileKey,
-} from 'lucide-react'
+import { FileKey, FolderOpen, Palette, Rocket, Settings } from 'lucide-react'
 import { type SidebarData } from '../types'
 
 export const sidebarData: SidebarData = {
@@ -14,11 +6,6 @@ export const sidebarData: SidebarData = {
     {
       title: 'General',
       items: [
-        {
-          title: 'Dashboard',
-          url: '/',
-          icon: LayoutDashboard,
-        },
         {
           title: 'Env files',
           url: '/env-files',
@@ -34,24 +21,19 @@ export const sidebarData: SidebarData = {
           icon: Settings,
           items: [
             {
-              title: 'Profile',
-              url: '/settings',
-              icon: UserCog,
+              title: 'Env folder',
+              url: '/settings/env-folder',
+              icon: FolderOpen,
             },
             {
-              title: 'Account',
-              url: '/settings/account',
-              icon: Wrench,
+              title: 'Apply',
+              url: '/settings/apply',
+              icon: Rocket,
             },
             {
               title: 'Appearance',
               url: '/settings/appearance',
               icon: Palette,
-            },
-            {
-              title: 'Display',
-              url: '/settings/display',
-              icon: Monitor,
             },
           ],
         },

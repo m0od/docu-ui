@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -8,10 +9,7 @@ import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { fetchEnvFolder } from './api/env-files-api'
-import { DocoCDForm } from './components/doco-cd-form'
 import { EnvFileList } from './components/env-file-list'
-import { EnvFolderForm } from './components/env-folder-form'
-import { SharedWebhookForm } from './components/shared-webhook-form'
 
 export function EnvFiles() {
   const envFolder = useQuery({
@@ -44,26 +42,25 @@ export function EnvFiles() {
               {envFolder.error.message}
             </p>
           )}
-          {envFolder.isSuccess && (
-            <>
-              {/* key: a saved change re-seeds the input with the new folder */}
-              <EnvFolderForm
-                key={envFolder.data}
-                savedFolder={envFolder.data}
-              />
-              {envFolder.data === '' ? (
+          {envFolder.isSuccess &&
+            (envFolder.data === '' ? (
+              <p className='text-sm text-muted-foreground'>
+                <Link to='/settings/env-folder' className='underline'>
+                  Choose the folder
+                </Link>{' '}
+                that holds your env files to get started.
+              </p>
+            ) : (
+              <>
                 <p className='text-sm text-muted-foreground'>
-                  Choose the folder that holds your env files to get started.
+                  In <code className='font-mono'>{envFolder.data}</code> ·{' '}
+                  <Link to='/settings/env-folder' className='underline'>
+                    Change
+                  </Link>
                 </p>
-              ) : (
                 <EnvFileList />
-              )}
-              <Separator />
-              <DocoCDForm />
-              <Separator />
-              <SharedWebhookForm />
-            </>
-          )}
+              </>
+            ))}
         </div>
       </Main>
     </>
