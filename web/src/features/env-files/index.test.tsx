@@ -4,15 +4,12 @@ import { render } from 'vitest-browser-react'
 import { fetchEnvFolder } from './api/env-files-api'
 import { EnvFiles } from './index'
 
-vi.mock('./api/env-files-api', () => ({
-  fetchEnvFolder: vi.fn(),
-  saveEnvFolder: vi.fn(),
-}))
-vi.mock('./components/doco-cd-form', () => ({
-  DocoCDForm: () => <p>doco-cd settings</p>,
-}))
-vi.mock('./components/shared-webhook-form', () => ({
-  SharedWebhookForm: () => <p>shared webhook settings</p>,
+vi.mock('./api/env-files-api', () => ({ fetchEnvFolder: vi.fn() }))
+vi.mock('@tanstack/react-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tanstack/react-router')>()),
+  Link: ({ to, ...linkProps }: React.ComponentProps<'a'> & { to: string }) => (
+    <a href={to} {...linkProps} />
+  ),
 }))
 vi.mock('./components/env-file-list', () => ({
   EnvFileList: () => <p>file list</p>,
@@ -32,14 +29,14 @@ describe('EnvFiles page', () => {
     vi.clearAllMocks()
   })
 
-  // A fresh install: ask for the folder instead of showing an error or an empty list.
+  // A fresh install: point to where the folder is chosen instead of showing an error or an empty list.
   it('asks for the folder when none is saved', async () => {
     vi.mocked(fetchEnvFolder).mockResolvedValueOnce('')
     const screen = await render(withQueryClient(<EnvFiles />))
 
     await expect
-      .element(screen.getByText(/Choose the folder/))
-      .toBeInTheDocument()
+      .element(screen.getByRole('link', { name: 'Choose the folder' }))
+      .toHaveAttribute('href', '/settings/env-folder')
     await expect.element(screen.getByText('file list')).not.toBeInTheDocument()
   })
 
@@ -47,16 +44,12 @@ describe('EnvFiles page', () => {
     vi.mocked(fetchEnvFolder).mockResolvedValueOnce('/host/env')
     const screen = await render(withQueryClient(<EnvFiles />))
 
+    // The folder is set in Settings; here it only says which one is listed.
+    await expect.element(screen.getByText('/host/env')).toBeInTheDocument()
     await expect
-      .element(screen.getByLabelText('Env folder'))
-      .toHaveValue('/host/env')
+      .element(screen.getByRole('link', { name: 'Change' }))
+      .toHaveAttribute('href', '/settings/env-folder')
     await expect.element(screen.getByText('file list')).toBeInTheDocument()
-    await expect
-      .element(screen.getByText('doco-cd settings'))
-      .toBeInTheDocument()
-    await expect
-      .element(screen.getByText('shared webhook settings'))
-      .toBeInTheDocument()
   })
 
   it('shows the server error', async () => {
