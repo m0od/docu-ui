@@ -1,5 +1,5 @@
 import { Outlet } from '@tanstack/react-router'
-import { FolderOpen, Palette, Rocket } from 'lucide-react'
+import { FolderOpen, Palette, Rocket, UserCog } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 import { ConfigDrawer } from '@/components/config-drawer'
 import { Header } from '@/components/layout/header'
@@ -19,6 +19,11 @@ const sidebarNavItems = [
     title: 'Apply',
     href: '/settings/apply',
     icon: <Rocket size={18} />,
+  },
+  {
+    title: 'Account',
+    href: '/settings/account',
+    icon: <UserCog size={18} />,
   },
   {
     title: 'Appearance',
@@ -44,7 +49,8 @@ export function Settings() {
             Settings
           </h1>
           <p className='text-muted-foreground'>
-            Where env files live, how they are applied, and how Docu-UI looks.
+            Where env files live, how they are applied, your account, and how
+            Docu-UI looks.
           </p>
         </div>
         <Separator className='my-4 lg:my-6' />

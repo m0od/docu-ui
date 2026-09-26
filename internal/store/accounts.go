@@ -63,3 +63,17 @@ func (store *Store) UseTOTPStep(ctx context.Context, accountID, timeStep int64) 
 	updatedRows, _ := result.RowsAffected() // SQLite always reports affected rows
 	return updatedRows == 1, nil
 }
+
+// SetPassword replaces the password hash of accountID.
+func (store *Store) SetPassword(ctx context.Context, accountID int64, passwordHash string) error {
+	_, err := store.database.ExecContext(ctx, `UPDATE accounts SET password_hash = ? WHERE id = ?`, passwordHash, accountID)
+	return err
+}
+
+// SetTOTP turns TOTP on with secret, or off with "". lastStep is the time step of the code that
+// proved the app works, so that same code cannot sign in again.
+func (store *Store) SetTOTP(ctx context.Context, accountID int64, secret string, lastStep int64) error {
+	_, err := store.database.ExecContext(ctx,
+		`UPDATE accounts SET totp_secret = ?, totp_last_step = ? WHERE id = ?`, secret, lastStep, accountID)
+	return err
+}

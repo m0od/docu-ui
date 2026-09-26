@@ -57,4 +57,28 @@ func TestSessionQueriesFailAfterClose(tester *testing.T) {
 	if err := testStore.DeleteSession(ctx, "hash"); err == nil {
 		tester.Error("DeleteSession should fail")
 	}
+	if err := testStore.DeleteOtherSessions(ctx, admin.ID, "hash"); err == nil {
+		tester.Error("DeleteOtherSessions should fail")
+	}
+}
+
+// After a password change, a stolen session elsewhere stops working; the one in use keeps going.
+func TestDeleteOtherSessionsKeepsTheCurrentOne(tester *testing.T) {
+	testStore, admin := storeWithAdmin(tester)
+	ctx := context.Background()
+	now := time.Now()
+	for _, tokenHash := range []string{"current", "stolen"} {
+		if err := testStore.CreateSession(ctx, tokenHash, admin.ID, now, now.Add(time.Hour)); err != nil {
+			tester.Fatal(err)
+		}
+	}
+	if err := testStore.DeleteOtherSessions(ctx, admin.ID, "current"); err != nil {
+		tester.Fatal(err)
+	}
+	if _, err := testStore.FindSessionUsername(ctx, "current", now); err != nil {
+		tester.Fatalf("current: %v", err)
+	}
+	if _, err := testStore.FindSessionUsername(ctx, "stolen", now); !errors.Is(err, ErrSessionNotFound) {
+		tester.Fatalf("stolen: %v", err)
+	}
 }

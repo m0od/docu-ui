@@ -99,4 +99,41 @@ func TestAccountQueriesFailAfterClose(tester *testing.T) {
 	if _, err := testStore.UseTOTPStep(ctx, admin.ID, 1); err == nil {
 		tester.Error("UseTOTPStep should fail")
 	}
+	if err := testStore.SetPassword(ctx, admin.ID, "new-hash"); err == nil {
+		tester.Error("SetPassword should fail")
+	}
+	if err := testStore.SetTOTP(ctx, admin.ID, "", 0); err == nil {
+		tester.Error("SetTOTP should fail")
+	}
+}
+
+func TestSetPassword(tester *testing.T) {
+	testStore, admin := storeWithAdmin(tester)
+	if err := testStore.SetPassword(context.Background(), admin.ID, "new-hash"); err != nil {
+		tester.Fatal(err)
+	}
+	if changed, _ := testStore.FindAccount(context.Background(), "admin"); changed.PasswordHash != "new-hash" {
+		tester.Fatalf("got %q", changed.PasswordHash)
+	}
+}
+
+// The code that turned TOTP on counts as used, so it cannot be replayed to sign in.
+func TestSetTOTPRecordsTheUsedStep(tester *testing.T) {
+	testStore, admin := storeWithAdmin(tester)
+	ctx := context.Background()
+	if err := testStore.SetTOTP(ctx, admin.ID, "NEWSECRET", 42); err != nil {
+		tester.Fatal(err)
+	}
+	if changed, _ := testStore.FindAccount(ctx, "admin"); changed.TOTPSecret != "NEWSECRET" {
+		tester.Fatalf("got %q", changed.TOTPSecret)
+	}
+	if accepted, _ := testStore.UseTOTPStep(ctx, admin.ID, 42); accepted {
+		tester.Fatal("the enabling code was accepted again")
+	}
+	if err := testStore.SetTOTP(ctx, admin.ID, "", 0); err != nil {
+		tester.Fatal(err)
+	}
+	if changed, _ := testStore.FindAccount(ctx, "admin"); changed.TOTPSecret != "" {
+		tester.Fatal("TOTP still on")
+	}
 }

@@ -37,6 +37,9 @@ docker logs docu-ui 2>&1 | grep setup_token
 Open the UI, enter the token, and create the admin account. Two-factor (TOTP) is optional on that page.
 The setup page closes for good once the first account exists; a new token is printed on each restart until then.
 
+Later, **Settings → Account** changes the password (other sessions are signed out) and turns TOTP on or off.
+Both need the current password; turning TOTP off also needs a code.
+
 ## Env files
 
 After signing in, open **Settings → Env folder** and enter the folder that holds your `*.env` files; **Env files** then lists them.

@@ -24,14 +24,15 @@ vi.mock('@/components/layout/main', () => ({
 }))
 
 describe('Settings', () => {
-  // Only real sections: the template's Profile, Account, Notifications and Display are gone.
-  it('lists the env folder, apply and appearance sections', async () => {
+  // Only real sections: the template's Profile, Notifications and Display are gone.
+  it('lists the env folder, apply, account and appearance sections', async () => {
     const screen = await render(<Settings />)
 
     const sections = screen.getByRole('listitem')
     expect(sections.elements().map((item) => item.textContent)).toEqual([
       'Env folder /settings/env-folder',
       'Apply /settings/apply',
+      'Account /settings/account',
       'Appearance /settings/appearance',
     ])
     await expect.element(screen.getByText('section')).toBeInTheDocument()
