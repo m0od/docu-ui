@@ -134,11 +134,11 @@ function ApplyTargetForm({
     },
   })
 
-  // Doco-CD needs a project; an own webhook needs its URL.
+  // Doco-CD and Compose need a project; an own webhook needs its URL.
   const isComplete =
-    adapter === 'doco-cd'
-      ? project.trim() !== ''
-      : !hasOwnWebhook || ownWebhook.url.trim() !== ''
+    adapter === 'webhook'
+      ? !hasOwnWebhook || ownWebhook.url.trim() !== ''
+      : project.trim() !== ''
 
   return (
     <form
@@ -157,6 +157,10 @@ function ApplyTargetForm({
         <Label className='font-normal'>
           <RadioGroupItem value='doco-cd' />
           Doco-CD
+        </Label>
+        <Label className='font-normal'>
+          <RadioGroupItem value='compose' />
+          Docker Compose on this host
         </Label>
         <Label className='font-normal'>
           <RadioGroupItem value='webhook' />
@@ -248,9 +252,9 @@ function NotAppliedAlert({ fileName, version, target }: NotAppliedAlertProps) {
   const recreated =
     target.services.length > 0 ? target.services.join(', ') : 'every service'
   const confirmText =
-    target.adapter === 'doco-cd'
-      ? `Doco-CD recreates ${recreated} in ${target.project}. They restart with the saved values.`
-      : `Docu-UI notifies the ${describeAdapter(target)} to apply ${describeServices(target)}. What happens next is up to the receiver.`
+    target.adapter === 'webhook'
+      ? `Docu-UI notifies the ${describeAdapter(target)} to apply ${describeServices(target)}. What happens next is up to the receiver.`
+      : `${describeAdapter(target)} recreates ${recreated} in ${target.project}. They restart with the saved values.`
 
   return (
     <Alert>
@@ -296,6 +300,9 @@ const NO_OWN_WEBHOOK: WebhookInput = {
 function describeAdapter(target: ApplyTarget): string {
   if (target.adapter === 'doco-cd') {
     return 'Doco-CD'
+  }
+  if (target.adapter === 'compose') {
+    return 'Docker Compose'
   }
   return target.webhook.url === '' ? 'shared webhook' : 'own webhook'
 }

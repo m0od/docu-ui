@@ -7,7 +7,7 @@ type DocoCDSettings = {
   hasApiKey: boolean
 }
 
-export type ApplyAdapter = 'doco-cd' | 'webhook'
+export type ApplyAdapter = 'doco-cd' | 'compose' | 'webhook'
 
 // A webhook as the server shows it: whether secrets are set, never their values.
 export type WebhookView = {

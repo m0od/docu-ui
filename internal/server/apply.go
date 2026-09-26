@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/m0od/docu-ui/internal/compose"
 	"github.com/m0od/docu-ui/internal/dococd"
 	"github.com/m0od/docu-ui/internal/envfiles"
 	"github.com/m0od/docu-ui/internal/store"
@@ -92,11 +93,13 @@ func (handlers envFileHandlers) setApplyTarget(writer http.ResponseWriter, reque
 	if !decodeJSON(writer, request, &targetInput) {
 		return
 	}
-	if targetInput.Adapter != store.AdapterDocoCD && targetInput.Adapter != store.AdapterWebhook {
-		writeError(writer, http.StatusBadRequest, "adapter must be doco-cd or webhook")
+	switch targetInput.Adapter {
+	case store.AdapterDocoCD, store.AdapterWebhook, store.AdapterCompose:
+	default:
+		writeError(writer, http.StatusBadRequest, "adapter must be doco-cd, webhook or compose")
 		return
 	}
-	// A webhook receiver may not care about Compose names; Doco-CD needs the project.
+	// A webhook receiver may not care about Compose names; Doco-CD and Compose need the project.
 	isOptionalProject := targetInput.Adapter == store.AdapterWebhook && targetInput.Project == ""
 	if !isOptionalProject && !projectPattern.MatchString(targetInput.Project) {
 		writeError(writer, http.StatusBadRequest, "the project name must be lowercase letters, digits, - or _")
@@ -148,7 +151,7 @@ func (handlers envFileHandlers) setApplyTarget(writer http.ResponseWriter, reque
 	writeApplyTarget(writer, target)
 }
 
-// apply recreates the target's services through Doco-CD, so they pick up the saved file.
+// apply hands the saved file to the target's adapter, so the services pick it up.
 func (handlers envFileHandlers) apply(writer http.ResponseWriter, request *http.Request, username string) {
 	var applyInput struct {
 		// The version the user looked at; a newer save must be reviewed before it goes live.
@@ -202,7 +205,13 @@ func (handlers envFileHandlers) apply(writer http.ResponseWriter, request *http.
 
 // runAdapter applies target; on failure it returns the HTTP status to answer with.
 func (handlers envFileHandlers) runAdapter(ctx context.Context, target store.ApplyTarget, delivery webhook.Delivery) (int, error) {
-	if target.Adapter == store.AdapterWebhook {
+	switch target.Adapter {
+	case store.AdapterCompose:
+		if err := compose.Recreate(ctx, target.Project, target.Services); err != nil {
+			return http.StatusBadGateway, err
+		}
+		return 0, nil
+	case store.AdapterWebhook:
 		// store.Webhook and webhook.Endpoint have the same fields, so they convert directly.
 		endpoint := webhook.Endpoint(target.Webhook)
 		if endpoint.URL == "" {
