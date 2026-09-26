@@ -310,3 +310,31 @@ func TestAuthReportsStoreFailures(tester *testing.T) {
 		tester.Errorf("sign-out on closed store: %d", signOut.Code)
 	}
 }
+
+func (failing failingStore) FindAccount(ctx context.Context, username string) (store.Account, error) {
+	if failing.failingMethod == "FindAccount" {
+		return store.Account{}, errStoreDown
+	}
+	return failing.Store.FindAccount(ctx, username)
+}
+
+func (failing failingStore) SetPassword(ctx context.Context, accountID int64, passwordHash string) error {
+	if failing.failingMethod == "SetPassword" {
+		return errStoreDown
+	}
+	return failing.Store.SetPassword(ctx, accountID, passwordHash)
+}
+
+func (failing failingStore) DeleteOtherSessions(ctx context.Context, accountID int64, keepTokenHash string) error {
+	if failing.failingMethod == "DeleteOtherSessions" {
+		return errStoreDown
+	}
+	return failing.Store.DeleteOtherSessions(ctx, accountID, keepTokenHash)
+}
+
+func (failing failingStore) SetTOTP(ctx context.Context, accountID int64, secret string, lastStep int64) error {
+	if failing.failingMethod == "SetTOTP" {
+		return errStoreDown
+	}
+	return failing.Store.SetTOTP(ctx, accountID, secret, lastStep)
+}

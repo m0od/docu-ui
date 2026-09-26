@@ -21,12 +21,13 @@ describe('ProfileDropdown', () => {
   })
 
   // No template Billing or New Team, and no shortcut hints that no key handler backs.
-  it('offers settings and sign out only', async () => {
+  it('offers account, settings and sign out only', async () => {
     const screen = await render(<ProfileDropdown />)
     await userEvent.click(screen.getByRole('button'))
 
     const menuItems = screen.getByRole('menuitem')
     expect(menuItems.elements().map((item) => item.textContent)).toEqual([
+      'Account',
       'Settings',
       'Sign out',
     ])
