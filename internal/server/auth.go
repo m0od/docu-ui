@@ -92,18 +92,13 @@ func (handlers authHandlers) signIn(writer http.ResponseWriter, request *http.Re
 			writeJSON(writer, http.StatusUnauthorized, map[string]any{"error": "enter the code from your authenticator app", "totpRequired": true})
 			return
 		}
-		codeStep, codeMatched := auth.MatchTOTPStep(account.TOTPSecret, signInInput.TOTPCode, currentTime)
-		if !codeMatched {
-			handlers.failSignIn(writer, request, account, "TOTP code is wrong", true)
-			return
-		}
-		stepAccepted, err := handlers.store.UseTOTPStep(ctx, account.ID, codeStep)
+		codeResult, err := checkSecondFactor(ctx, handlers.store, account, signInInput.TOTPCode)
 		if err != nil {
 			writeError(writer, http.StatusInternalServerError, "cannot save sign-in")
 			return
 		}
-		if !stepAccepted {
-			handlers.failSignIn(writer, request, account, "TOTP code was already used: wait for the next code", true)
+		if codeResult != secondFactorAccepted {
+			handlers.failSignIn(writer, request, account, codeResult.problem(), true)
 			return
 		}
 	}

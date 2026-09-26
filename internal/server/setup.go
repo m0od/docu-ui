@@ -33,6 +33,9 @@ type Store interface {
 	DeleteOtherSessions(ctx context.Context, accountID int64, keepTokenHash string) error
 	SetPassword(ctx context.Context, accountID int64, passwordHash string) error
 	SetTOTP(ctx context.Context, accountID int64, secret string, lastStep int64) error
+	ReplaceRecoveryCodes(ctx context.Context, accountID int64, codeHashes []string) error
+	UseRecoveryCode(ctx context.Context, accountID int64, codeHash string) (bool, error)
+	CountRecoveryCodes(ctx context.Context, accountID int64) (int, error)
 	EnvFolder(ctx context.Context) (string, error)
 	SetEnvFolder(ctx context.Context, folder string) error
 	DocoCD(ctx context.Context) (store.DocoCD, error)
@@ -125,7 +128,24 @@ func (handlers setupHandlers) createFirstAccount(writer http.ResponseWriter, req
 		writeError(writer, http.StatusInternalServerError, "cannot save account")
 		return
 	}
-	writeJSON(writer, http.StatusCreated, map[string]string{"username": setupInput.Username})
+	if setupInput.TOTPSecret == "" {
+		writeJSON(writer, http.StatusCreated, map[string]string{"username": setupInput.Username})
+		return
+	}
+	recoveryCodes, err := handlers.issueFirstRecoveryCodes(request, setupInput.Username)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, "account created, but cannot save recovery codes: create them on the account page")
+		return
+	}
+	writeJSON(writer, http.StatusCreated, map[string]any{"username": setupInput.Username, "recoveryCodes": recoveryCodes})
+}
+
+func (handlers setupHandlers) issueFirstRecoveryCodes(request *http.Request, username string) ([]string, error) {
+	account, err := handlers.accounts.FindAccount(request.Context(), username)
+	if err != nil {
+		return nil, err
+	}
+	return issueRecoveryCodes(request.Context(), handlers.accounts, account.ID)
 }
 
 func (handlers setupHandlers) skipSignIn(writer http.ResponseWriter, request *http.Request) {

@@ -76,6 +76,7 @@ func TestEnvRoutesRequireSession(tester *testing.T) {
 		{http.MethodGet, "/api/account/totp-secret"},
 		{http.MethodPost, "/api/account/totp"},
 		{http.MethodPost, "/api/account/totp/disable"},
+		{http.MethodPost, "/api/account/recovery-codes"},
 		{http.MethodPost, "/api/account/sign-in"},
 		{http.MethodPost, "/api/account/sign-in/disable"},
 	}

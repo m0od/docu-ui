@@ -116,7 +116,8 @@ func TestEnableTOTP(tester *testing.T) {
 		}
 	}
 
-	if enabled := sendJSON(handler, http.MethodPost, "/api/account/totp", enableBody(adminPassword, authTestSecret, "287082"), sessionCookie); enabled.Code != http.StatusNoContent {
+	enabled := sendJSON(handler, http.MethodPost, "/api/account/totp", enableBody(adminPassword, authTestSecret, "287082"), sessionCookie)
+	if enabled.Code != http.StatusOK || len(recoveryCodesFrom(tester, enabled)) != auth.RecoveryCodeCount {
 		tester.Fatalf("enable: %d %s", enabled.Code, enabled.Body.String())
 	}
 	if again := sendJSON(handler, http.MethodPost, "/api/account/totp", enableBody(adminPassword, authTestSecret, "287082"), sessionCookie); again.Code != http.StatusConflict {
@@ -180,6 +181,7 @@ func TestAccountReportsStoreFailures(tester *testing.T) {
 		{"SetPassword", "", http.MethodPut, "/api/account/password", passwordBody},
 		{"DeleteOtherSessions", "", http.MethodPut, "/api/account/password", passwordBody},
 		{"SetTOTP", "", http.MethodPost, "/api/account/totp", enableBody},
+		{"ReplaceRecoveryCodes", "", http.MethodPost, "/api/account/totp", enableBody},
 		{"UseTOTPStep", authTestSecret, http.MethodPost, "/api/account/totp/disable", disableBody},
 		{"SetTOTP", authTestSecret, http.MethodPost, "/api/account/totp/disable", disableBody},
 	}

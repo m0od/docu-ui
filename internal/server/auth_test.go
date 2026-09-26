@@ -370,3 +370,24 @@ func (failing failingStore) FindSessionUsername(ctx context.Context, tokenHash s
 	}
 	return failing.Store.FindSessionUsername(ctx, tokenHash, currentTime)
 }
+
+func (failing failingStore) ReplaceRecoveryCodes(ctx context.Context, accountID int64, codeHashes []string) error {
+	if failing.failingMethod == "ReplaceRecoveryCodes" {
+		return errStoreDown
+	}
+	return failing.Store.ReplaceRecoveryCodes(ctx, accountID, codeHashes)
+}
+
+func (failing failingStore) UseRecoveryCode(ctx context.Context, accountID int64, codeHash string) (bool, error) {
+	if failing.failingMethod == "UseRecoveryCode" {
+		return false, errStoreDown
+	}
+	return failing.Store.UseRecoveryCode(ctx, accountID, codeHash)
+}
+
+func (failing failingStore) CountRecoveryCodes(ctx context.Context, accountID int64) (int, error) {
+	if failing.failingMethod == "CountRecoveryCodes" {
+		return 0, errStoreDown
+	}
+	return failing.Store.CountRecoveryCodes(ctx, accountID)
+}

@@ -26,6 +26,18 @@ type fakeAccounts struct {
 	readError         error
 	writeError        error
 	signInSkipped     bool
+	recoveryHashes    []string
+	recoveryError     error
+	findError         error
+}
+
+func (accounts *fakeAccounts) FindAccount(_ context.Context, username string) (store.Account, error) {
+	return store.Account{ID: 1, Username: username, TOTPSecret: accounts.createdTOTPSecret}, accounts.findError
+}
+
+func (accounts *fakeAccounts) ReplaceRecoveryCodes(_ context.Context, _ int64, codeHashes []string) error {
+	accounts.recoveryHashes = codeHashes
+	return accounts.recoveryError
 }
 
 func (accounts *fakeAccounts) NeedsSetup(context.Context) (bool, error) {
@@ -126,6 +138,37 @@ func TestSetupWithTOTP(tester *testing.T) {
 	rightCode := postSetup(handler, "application/json", setupBody(map[string]string{"totpSecret": rfcSecret, "totpCode": "287082"}))
 	if rightCode.Code != http.StatusCreated || accounts.createdTOTPSecret != rfcSecret {
 		tester.Fatalf("right code: %d %s", rightCode.Code, rightCode.Body.String())
+	}
+	// The admin gets recovery codes at once, in case the phone is lost before they ever sign in;
+	// only their hashes are stored.
+	var setupResult struct{ RecoveryCodes []string }
+	if err := json.Unmarshal(rightCode.Body.Bytes(), &setupResult); err != nil {
+		tester.Fatal(err)
+	}
+	if len(setupResult.RecoveryCodes) != auth.RecoveryCodeCount || len(accounts.recoveryHashes) != auth.RecoveryCodeCount {
+		tester.Fatalf("got %d codes, stored %d", len(setupResult.RecoveryCodes), len(accounts.recoveryHashes))
+	}
+	if accounts.recoveryHashes[0] != auth.HashRecoveryCode(setupResult.RecoveryCodes[0]) {
+		tester.Fatalf("stored %q for code %q", accounts.recoveryHashes[0], setupResult.RecoveryCodes[0])
+	}
+}
+
+// The account exists even when its codes cannot be saved, so the admin is told to create them later.
+func TestSetupWithTOTPCannotSaveRecoveryCodes(tester *testing.T) {
+	rfcSecret := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString([]byte("12345678901234567890"))
+	now = func() time.Time { return time.Unix(59, 0) }
+	tester.Cleanup(func() { now = time.Now })
+
+	for caseName, accounts := range map[string]*fakeAccounts{
+		"cannot read the new account": {findError: errors.New("disk gone")},
+		"cannot save the codes":       {recoveryError: errors.New("disk full")},
+	} {
+		recorder := postSetup(newSetupServer(tester, accounts, testSetupToken), "application/json",
+			setupBody(map[string]string{"totpSecret": rfcSecret, "totpCode": "287082"}))
+		if recorder.Code != http.StatusInternalServerError || accounts.createdUsername != "admin" ||
+			!strings.Contains(recorder.Body.String(), "account created") {
+			tester.Errorf("%s: got %d %s, created %q", caseName, recorder.Code, recorder.Body.String(), accounts.createdUsername)
+		}
 	}
 }
 

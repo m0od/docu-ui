@@ -17,6 +17,7 @@ const (
 	wrongTOTPCode        = "TOTP code is wrong"
 	cannotAccounts       = "cannot read accounts"
 	cannotSaveAccount    = "cannot save account"
+	cannotSaveRecovery   = "cannot save recovery codes"
 )
 
 func (handlers authHandlers) registerAccount(routes *http.ServeMux) {
@@ -25,6 +26,7 @@ func (handlers authHandlers) registerAccount(routes *http.ServeMux) {
 	routes.Handle("GET /api/account/totp-secret", handlers.requireSession(handlers.newTOTPSecret))
 	routes.Handle("POST /api/account/totp", handlers.requireSession(handlers.enableTOTP))
 	routes.Handle("POST /api/account/totp/disable", handlers.requireSession(handlers.disableTOTP))
+	routes.Handle("POST /api/account/recovery-codes", handlers.requireSession(handlers.regenerateRecoveryCodes))
 	routes.Handle("POST /api/account/sign-in", handlers.requireSession(handlers.turnOnSignIn))
 	routes.Handle("POST /api/account/sign-in/disable", handlers.requireSession(handlers.turnOffSignIn))
 }
@@ -39,7 +41,17 @@ func (handlers authHandlers) account(writer http.ResponseWriter, request *http.R
 		writeError(writer, http.StatusInternalServerError, cannotAccounts)
 		return
 	}
-	writeJSON(writer, http.StatusOK, map[string]any{"signIn": true, "username": account.Username, "totpEnabled": account.TOTPSecret != ""})
+	accountInfo := map[string]any{"signIn": true, "username": account.Username, "totpEnabled": account.TOTPSecret != ""}
+	if account.TOTPSecret != "" {
+		// Codes left over from an earlier TOTP setup do not count while TOTP is off.
+		recoveryCodesLeft, err := handlers.store.CountRecoveryCodes(request.Context(), account.ID)
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, cannotAccounts)
+			return
+		}
+		accountInfo["recoveryCodesLeft"] = recoveryCodesLeft
+	}
+	writeJSON(writer, http.StatusOK, accountInfo)
 }
 
 // turnOnSignIn creates the account while sign-in is off. From then on every request needs a
@@ -138,6 +150,7 @@ func (handlers authHandlers) newTOTPSecret(writer http.ResponseWriter, _ *http.R
 }
 
 // enableTOTP needs the current password and a code from the app, which proves the app was set up.
+// It answers with a new set of recovery codes, replacing any from an earlier TOTP setup.
 func (handlers authHandlers) enableTOTP(writer http.ResponseWriter, request *http.Request, username string) {
 	var totpInput struct {
 		CurrentPassword string `json:"currentPassword"`
@@ -169,7 +182,42 @@ func (handlers authHandlers) enableTOTP(writer http.ResponseWriter, request *htt
 		return
 	}
 	slog.Info("totp enabled", "user", username)
-	writer.WriteHeader(http.StatusNoContent)
+	recoveryCodes, err := issueRecoveryCodes(request.Context(), handlers.store, account.ID)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, "TOTP is on, but "+cannotSaveRecovery+": create new ones on the account page")
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string][]string{"recoveryCodes": recoveryCodes})
+}
+
+// regenerateRecoveryCodes replaces the account's recovery codes, e.g. when few are left or the
+// list was exposed. It needs both factors; the old codes stop working at once.
+func (handlers authHandlers) regenerateRecoveryCodes(writer http.ResponseWriter, request *http.Request, username string) {
+	var confirmInput struct {
+		CurrentPassword string `json:"currentPassword"`
+		Code            string `json:"code"`
+	}
+	if !decodeJSON(writer, request, &confirmInput) {
+		return
+	}
+	account, ok := handlers.confirmPassword(writer, request, username, confirmInput.CurrentPassword)
+	if !ok {
+		return
+	}
+	if account.TOTPSecret == "" {
+		writeError(writer, http.StatusConflict, "TOTP is off: recovery codes are only for TOTP")
+		return
+	}
+	if !handlers.confirmTOTPCode(writer, request, account, confirmInput.Code) {
+		return
+	}
+	recoveryCodes, err := issueRecoveryCodes(request.Context(), handlers.store, account.ID)
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, cannotSaveRecovery)
+		return
+	}
+	slog.Info("recovery codes replaced", "user", username)
+	writeJSON(writer, http.StatusOK, map[string][]string{"recoveryCodes": recoveryCodes})
 }
 
 // disableTOTP needs the current password and a current code: both factors, like signing in.
@@ -225,20 +273,15 @@ func (handlers authHandlers) confirmPassword(writer http.ResponseWriter, request
 	return account, true
 }
 
-// confirmTOTPCode checks a code from the account's app; a code already used does not count.
+// confirmTOTPCode checks a code from the account's app, or a recovery code; a code already used does not count.
 func (handlers authHandlers) confirmTOTPCode(writer http.ResponseWriter, request *http.Request, account store.Account, code string) bool {
-	codeStep, codeMatched := auth.MatchTOTPStep(account.TOTPSecret, code, now())
-	if !codeMatched {
-		handlers.failConfirmation(writer, request, account, wrongTOTPCode)
-		return false
-	}
-	stepAccepted, err := handlers.store.UseTOTPStep(request.Context(), account.ID, codeStep)
+	codeResult, err := checkSecondFactor(request.Context(), handlers.store, account, code)
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, cannotSaveAccount)
 		return false
 	}
-	if !stepAccepted {
-		handlers.failConfirmation(writer, request, account, "TOTP code was already used: wait for the next code")
+	if codeResult != secondFactorAccepted {
+		handlers.failConfirmation(writer, request, account, codeResult.problem())
 		return false
 	}
 	return true
