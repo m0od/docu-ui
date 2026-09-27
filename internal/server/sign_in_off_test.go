@@ -87,7 +87,7 @@ func TestSessionCheckFailsClosed(tester *testing.T) {
 func TestSessionReadFailureFailsClosed(tester *testing.T) {
 	testStore := openAdminStore(tester, "")
 	_, sessionCookie := signedIn(tester, testStore)
-	handler := newAuthServer(tester, Config{Store: failingStore{Store: testStore, failingMethod: "FindSessionUsername"}})
+	handler := newAuthServer(tester, Config{Store: failingStore{Store: testStore, failingMethod: "UseSession"}})
 	if response := sendJSON(handler, http.MethodGet, "/api/auth/me", "", sessionCookie); response.Code != http.StatusInternalServerError {
 		tester.Fatalf("got %d", response.Code)
 	}

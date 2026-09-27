@@ -234,7 +234,7 @@ func TestMeRequiresLiveSession(tester *testing.T) {
 	if forged := sendJSON(handler, http.MethodGet, "/api/auth/me", "", forgedCookie); forged.Code != http.StatusUnauthorized {
 		tester.Errorf("forged cookie: %d", forged.Code)
 	}
-	setClock(tester, startTime.Add(sessionLifetime))
+	setClock(tester, startTime.Add(sessionIdleTimeout))
 	if expired := sendJSON(handler, http.MethodGet, "/api/auth/me", "", sessionCookie); expired.Code != http.StatusUnauthorized {
 		tester.Errorf("expired session: %d", expired.Code)
 	}
@@ -367,11 +367,11 @@ func (failing failingStore) CreateFirstAccount(ctx context.Context, username, pa
 	return failing.Store.CreateFirstAccount(ctx, username, passwordHash, totpSecret)
 }
 
-func (failing failingStore) FindSessionUsername(ctx context.Context, tokenHash string, currentTime time.Time) (string, error) {
-	if failing.failingMethod == "FindSessionUsername" {
+func (failing failingStore) UseSession(ctx context.Context, tokenHash string, currentTime time.Time, idleTimeout time.Duration) (string, error) {
+	if failing.failingMethod == "UseSession" {
 		return "", errStoreDown
 	}
-	return failing.Store.FindSessionUsername(ctx, tokenHash, currentTime)
+	return failing.Store.UseSession(ctx, tokenHash, currentTime, idleTimeout)
 }
 
 func (failing failingStore) ReplaceRecoveryCodes(ctx context.Context, accountID int64, codeHashes []string) error {
@@ -410,5 +410,42 @@ func TestWrongTOTPCodesLockAccount(tester *testing.T) {
 	setClock(tester, time.Unix(1234567890, 0)) // long after the lock; RFC 6238: the code is 005924
 	if signInCode(handler, adminPassword, "005924") != http.StatusOK {
 		tester.Fatal("the lock must expire")
+	}
+}
+
+// OWASP timeouts through the API: requests keep a session alive past 30 minutes, 30 idle minutes end it,
+// and even a busy session ends 8 hours after sign-in, when the cookie itself expires.
+func TestSessionTimeouts(tester *testing.T) {
+	handler := newAuthServer(tester, Config{Store: openAdminStore(tester, "")})
+	meCode := func(sessionCookie *http.Cookie, at time.Time) int {
+		setClock(tester, at)
+		return sendJSON(handler, http.MethodGet, "/api/auth/me", "", sessionCookie).Code
+	}
+	signInAt := func(at time.Time) *http.Cookie {
+		setClock(tester, at)
+		return sessionCookieFrom(tester, sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, "")))
+	}
+
+	idleStart := time.Unix(1_000_000, 0)
+	idleCookie := signInAt(idleStart)
+	if meCode(idleCookie, idleStart.Add(25*time.Minute)) != http.StatusOK || meCode(idleCookie, idleStart.Add(50*time.Minute)) != http.StatusOK {
+		tester.Fatal("an active session must outlive the idle timeout")
+	}
+	if code := meCode(idleCookie, idleStart.Add(80*time.Minute)); code != http.StatusUnauthorized {
+		tester.Fatalf("30 idle minutes: got %d", code)
+	}
+
+	busyStart := time.Unix(2_000_000, 0)
+	busyCookie := signInAt(busyStart)
+	if !busyCookie.Expires.Equal(busyStart.Add(sessionMaxLifetime)) {
+		tester.Fatalf("cookie expires %v", busyCookie.Expires)
+	}
+	for usedAt := busyStart; usedAt.Before(busyStart.Add(sessionMaxLifetime)); usedAt = usedAt.Add(25 * time.Minute) {
+		if code := meCode(busyCookie, usedAt); code != http.StatusOK {
+			tester.Fatalf("after %v: got %d", usedAt.Sub(busyStart), code)
+		}
+	}
+	if code := meCode(busyCookie, busyStart.Add(sessionMaxLifetime)); code != http.StatusUnauthorized {
+		tester.Fatalf("after 8 hours: got %d", code)
 	}
 }

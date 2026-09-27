@@ -158,7 +158,7 @@ func TestTurnOffSignInRemovesAccountsAndSessions(tester *testing.T) {
 	if _, err := testStore.FindAccount(ctx, "admin"); !errors.Is(err, ErrAccountNotFound) {
 		tester.Fatalf("account: %v", err)
 	}
-	if _, err := testStore.FindSessionUsername(ctx, "hash-1", now); !errors.Is(err, ErrSessionNotFound) {
+	if _, err := testStore.UseSession(ctx, "hash-1", now, time.Hour); !errors.Is(err, ErrSessionNotFound) {
 		tester.Fatalf("session: %v", err)
 	}
 	if needsSetup, signInOff := signInState(tester, testStore); needsSetup || !signInOff {
