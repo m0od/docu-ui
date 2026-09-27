@@ -239,6 +239,10 @@ type NotAppliedAlertProps = {
 
 function NotAppliedAlert({ fileName, version, target }: NotAppliedAlertProps) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  // The version the user looked at when opening the dialog.
+  const [reviewedVersion, setReviewedVersion] = useState(version)
+  // Someone saved meanwhile: the page shows the newer version, the dialog must not apply it unseen.
+  const isOutdated = reviewedVersion !== version
   const queryClient = useQueryClient()
   const apply = useMutation({
     mutationFn: () => applyEnvFile(fileName, version),
@@ -265,7 +269,11 @@ function NotAppliedAlert({ fileName, version, target }: NotAppliedAlertProps) {
         <Button
           size='sm'
           className='mt-2'
-          onClick={() => setIsConfirmOpen(true)}
+          onClick={() => {
+            apply.reset()
+            setReviewedVersion(version)
+            setIsConfirmOpen(true)
+          }}
         >
           <Rocket />
           Apply
@@ -278,8 +286,15 @@ function NotAppliedAlert({ fileName, version, target }: NotAppliedAlertProps) {
         desc={confirmText}
         confirmText='Apply'
         isLoading={apply.isPending}
+        disabled={isOutdated}
         handleConfirm={() => apply.mutateAsync()}
       >
+        {isOutdated && (
+          <p className='text-sm font-medium'>
+            A newer version was saved: close this and check the new version
+            before applying.
+          </p>
+        )}
         {apply.isError && (
           <p role='alert' className='text-sm font-medium text-destructive'>
             {apply.error.message}

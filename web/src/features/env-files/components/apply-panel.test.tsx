@@ -1,7 +1,9 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { withQueryClient } from '@/test-utils/query-client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
+import { ApiError } from '@/lib/api-client'
 import {
   applyEnvFile,
   fetchApplyState,
@@ -437,5 +439,73 @@ describe('ApplyPanel', () => {
 
     await vi.waitFor(() => expect(applyEnvFile).toHaveBeenCalled())
     expect(applyEnvFile).toHaveBeenCalledOnce()
+  })
+
+  // Someone saved while the dialog was open. Apply restarts running containers with the file,
+  // so the dialog must not go on to apply a version the user never saw: close, look, apply again.
+  it('applies only the version it was opened for', async () => {
+    vi.mocked(fetchApplyState).mockResolvedValue({
+      target: {
+        adapter: 'doco-cd',
+        project: 'shop-dev',
+        services: ['api'],
+        webhook: NO_WEBHOOK,
+      },
+      appliedVersion: 'version-1',
+    })
+    vi.mocked(applyEnvFile).mockRejectedValueOnce(
+      new ApiError(409, {
+        error: 'the file changed since you opened it: reload and try again',
+      })
+    )
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const panelFor = (version: string) => (
+      <QueryClientProvider client={queryClient}>
+        <ApplyPanel fileName='api.env' version={version} />
+      </QueryClientProvider>
+    )
+    const screen = await render(panelFor('version-2'))
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    const dialog = screen.getByRole('alertdialog')
+    await userEvent.click(dialog.getByRole('button', { name: 'Apply' }))
+    await expect
+      .element(dialog.getByRole('alert'))
+      .toHaveTextContent('the file changed since you opened it')
+    // The page reloads the file behind the dialog and now shows the newer version.
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['env', 'file'] })
+    await screen.rerender(panelFor('version-3'))
+
+    await expect
+      .element(dialog.getByRole('button', { name: 'Apply' }))
+      .toBeDisabled()
+    await expect
+      .element(dialog)
+      .toHaveTextContent('close this and check the new version')
+
+    await userEvent.click(dialog.getByRole('button', { name: 'Cancel' }))
+    vi.mocked(applyEnvFile).mockResolvedValueOnce({
+      target: {
+        adapter: 'doco-cd',
+        project: 'shop-dev',
+        services: ['api'],
+        webhook: NO_WEBHOOK,
+      },
+      appliedVersion: 'version-3',
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    await expect
+      .element(dialog)
+      .not.toHaveTextContent('the file changed since you opened it')
+    await userEvent.click(dialog.getByRole('button', { name: 'Apply' }))
+
+    await vi.waitFor(() =>
+      expect(vi.mocked(applyEnvFile).mock.calls).toEqual([
+        ['api.env', 'version-2'],
+        ['api.env', 'version-3'],
+      ])
+    )
   })
 })
