@@ -21,6 +21,9 @@ type Config struct {
 	// InsecureCookie drops the Secure flag from the session cookie so sign-in works over plain HTTP.
 	// Only for a trusted network; normally TLS is on at the gateway or in Docu-UI itself.
 	InsecureCookie bool
+	// AllowedHosts are extra host names (besides localhost and IP addresses) the API answers
+	// while sign-in is off, e.g. the gateway's name. Empty entries are ignored.
+	AllowedHosts []string
 }
 
 // New returns the root handler.
@@ -41,7 +44,14 @@ func New(config Config, uiFiles fs.FS) (http.Handler, error) {
 		_, _ = writer.Write([]byte("ok"))
 	})
 	setupHandlers{accounts: config.Store, setupToken: config.SetupToken}.register(appRoutes)
-	authentication := authHandlers{store: config.Store, cookiePath: basePath + "/", secureCookie: !config.InsecureCookie}
+	allowedHosts := map[string]bool{}
+	for _, hostName := range config.AllowedHosts {
+		if hostName = strings.ToLower(strings.TrimSpace(hostName)); hostName != "" {
+			allowedHosts[hostName] = true
+		}
+	}
+	authentication := authHandlers{store: config.Store, cookiePath: basePath + "/", secureCookie: !config.InsecureCookie,
+		allowedHosts: allowedHosts}
 	authentication.register(appRoutes)
 	envFileHandlers{store: config.Store, requireSession: authentication.requireSession}.register(appRoutes)
 	// Unknown API paths get a JSON 404, not the UI page.

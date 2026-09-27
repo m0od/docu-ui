@@ -25,6 +25,7 @@ make image   # docker build
 | `DOCU_DATA_DIR` | `/data` | Where the SQLite database (`docu-ui.db`) lives; mount a volume here |
 | `DOCU_TLS_CERT` / `DOCU_TLS_KEY` | *(empty)* | PEM cert and key to serve HTTPS directly (standalone). Leave empty behind a TLS-terminating gateway |
 | `DOCU_INSECURE_COOKIE` | `false` | `true` drops the Secure flag from the session cookie so sign-in works over plain HTTP. Trusted networks only |
+| `DOCU_ALLOWED_HOSTS` | *(empty)* | Comma-separated host names the API answers while sign-in is off, e.g. `docu.lan`. `localhost` and IP addresses always work |
 
 ## First run
 
@@ -55,6 +56,10 @@ if the phone is lost, a recovery code works once wherever a TOTP code is asked. 
 On a personal machine, tick **Don't set up sign-in** on the setup page (the setup token is still needed).
 Docu-UI then opens without signing in, shows a red banner on every page, and logs a warning at each start.
 **Anyone who reaches the URL can read and change every env file** (and run containers, if the Docker socket is mounted), so only use it where nobody else can reach Docu-UI.
+
+So that a web page from another site cannot reach it through your browser (DNS rebinding), the API then only answers requests
+addressed to `localhost`, an IP address, or a name listed in `DOCU_ALLOWED_HOSTS`. Opened by any other name, the UI shows an error
+and the log says which host to add.
 
 **Settings → Account** switches later: *Turn on sign-in* creates the account;
 *Turn off sign-in* needs the password (and a code when TOTP is on) and deletes the account and its sessions.

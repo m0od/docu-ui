@@ -252,6 +252,8 @@ func TestWriteRoutesRefuseCrossSiteContentTypes(tester *testing.T) {
 			for _, contentType := range crossSiteContentTypes {
 				recorder := httptest.NewRecorder()
 				request := httptest.NewRequest(route[0], route[1], strings.NewReader(attackBody))
+				// A cross-site form posts to the address Docu-UI really has, so the host check lets it through.
+				request.Host = "localhost:8080"
 				if contentType != "" {
 					request.Header.Set("Content-Type", contentType)
 				}
@@ -278,7 +280,60 @@ func TestJSONWithCharsetIsAccepted(tester *testing.T) {
 	handler := newAuthServer(tester, Config{Store: openSignInOffStore(tester)})
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPut, "/api/settings/env-folder", strings.NewReader(envFolderBody(tester.TempDir())))
+	request.Host = "localhost:8080"
 	request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		tester.Fatalf("got %d %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+// DNS rebinding: a page from another site makes its own name resolve to Docu-UI, and the browser
+// then lets it read the answers. Without sign-in nothing else stops it, so only hosts another site
+// cannot take over are answered: localhost, IP addresses, and the names listed in DOCU_ALLOWED_HOSTS.
+func TestSignInOffAnswersOnlyKnownHosts(tester *testing.T) {
+	handler := newAuthServer(tester, Config{Store: openSignInOffStore(tester), AllowedHosts: []string{" Docu.LAN ", ""}})
+	requestWithHost := func(hostHeader string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/settings/env-folder", nil)
+		request.Host = hostHeader
+		handler.ServeHTTP(recorder, request)
+		return recorder
+	}
+	for _, hostHeader := range []string{
+		"localhost:8080", "localhost", "app.localhost:8080", "127.0.0.1:8080", "192.168.1.5", "[::1]:8080", "[::1]",
+		// Listed names match without regard to case, port or a trailing dot.
+		"docu.lan", "DOCU.LAN:443", "docu.lan.",
+	} {
+		if response := requestWithHost(hostHeader); response.Code != http.StatusOK {
+			tester.Errorf("%q refused: %d %s", hostHeader, response.Code, response.Body.String())
+		}
+	}
+	for _, hostHeader := range []string{
+		"evil.example:8080", "evil.example", "localhost.evil.example", "docu.lan.evil.example", "127.0.0.1.nip.io",
+		// An empty entry in DOCU_ALLOWED_HOSTS ("a,,b") must not allow a request without a host.
+		"",
+	} {
+		response := requestWithHost(hostHeader)
+		if response.Code != http.StatusForbidden || !strings.Contains(responseField(tester, response, "error").(string), "DOCU_ALLOWED_HOSTS") {
+			tester.Errorf("%q: got %d %s", hostHeader, response.Code, response.Body.String())
+		}
+	}
+	// The message names the host as DOCU_ALLOWED_HOSTS takes it, without the port.
+	refused := requestWithHost("Evil.Example:8080")
+	if message := responseField(tester, refused, "error"); !strings.HasPrefix(message.(string), "host evil.example is not allowed") {
+		tester.Errorf("message: %v", message)
+	}
+}
+
+// With sign-in on, the session cookie is only sent to Docu-UI's real name, so another site gets no
+// session anyway: the host is not checked, and a gateway's name needs no DOCU_ALLOWED_HOSTS.
+func TestSignedInRequestsSkipTheHostCheck(tester *testing.T) {
+	handler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/settings/env-folder", nil)
+	request.Host = "docu.example.com"
+	request.AddCookie(sessionCookie)
 	handler.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
 		tester.Fatalf("got %d %s", recorder.Code, recorder.Body.String())

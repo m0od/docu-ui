@@ -5,7 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -49,6 +52,9 @@ type authHandlers struct {
 	store        Store
 	cookiePath   string
 	secureCookie bool
+	// allowedHosts are the host names (lower case, no port) accepted while sign-in is off,
+	// on top of localhost and IP addresses.
+	allowedHosts map[string]bool
 }
 
 func (handlers authHandlers) register(routes *http.ServeMux) {
@@ -161,6 +167,13 @@ func (handlers authHandlers) requireSession(next func(http.ResponseWriter, *http
 			return
 		}
 		if signInOff {
+			if hostName := requestHostName(request.Host); !handlers.hostAllowed(hostName) {
+				// Only a page from another site, whose name now resolves to Docu-UI (DNS rebinding),
+				// reaches here: without sign-in, nothing else would stop it from reading every value.
+				slog.Warn("request refused: host not allowed while sign-in is off", "host", hostName)
+				writeError(writer, http.StatusForbidden, "host "+hostName+" is not allowed while sign-in is off: add it to DOCU_ALLOWED_HOSTS")
+				return
+			}
 			next(writer, request.WithContext(context.WithValue(request.Context(), signInOffKey{}, true)), anonymousUser)
 			return
 		}
@@ -180,6 +193,25 @@ func (handlers authHandlers) requireSession(next func(http.ResponseWriter, *http
 		}
 		next(writer, request, username)
 	})
+}
+
+// requestHostName turns a Host header into the name DOCU_ALLOWED_HOSTS lists: lower case,
+// without port, brackets or trailing dot.
+func requestHostName(hostHeader string) string {
+	hostName, _, err := net.SplitHostPort(hostHeader)
+	if err != nil {
+		hostName = hostHeader // no port
+	}
+	return strings.ToLower(strings.TrimSuffix(strings.Trim(hostName, "[]"), "."))
+}
+
+// hostAllowed accepts localhost and IP addresses, which another site cannot make its own name
+// point to, and the host names listed in DOCU_ALLOWED_HOSTS.
+func (handlers authHandlers) hostAllowed(hostName string) bool {
+	if hostName == "localhost" || strings.HasSuffix(hostName, ".localhost") || net.ParseIP(hostName) != nil {
+		return true
+	}
+	return handlers.allowedHosts[hostName]
 }
 
 func isSignInOff(request *http.Request) bool {
