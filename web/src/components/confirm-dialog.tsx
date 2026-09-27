@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { cn } from '@/lib/utils'
 import {
   AlertDialog,
@@ -24,7 +25,8 @@ type ConfirmDialogProps = {
   children?: React.ReactNode
 } & (
   | { form: string; handleConfirm?: undefined }
-  | { form?: undefined; handleConfirm: () => void }
+  // A returned promise (e.g. mutateAsync) blocks further confirms until it settles.
+  | { form?: undefined; handleConfirm: () => void | Promise<unknown> }
 )
 
 export function ConfirmDialog(props: ConfirmDialogProps) {
@@ -42,6 +44,24 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
     handleConfirm,
     ...actions
   } = props
+  const isConfirming = useRef(false)
+
+  // A double click lands before the re-render that disables the button (isLoading),
+  // so the second click is dropped here while the first one's work is running.
+  async function confirmOnce() {
+    if (isConfirming.current) {
+      return
+    }
+    isConfirming.current = true
+    try {
+      await handleConfirm?.()
+    } catch {
+      // The caller shows its own error (e.g. the mutation's) in the dialog.
+    } finally {
+      isConfirming.current = false
+    }
+  }
+
   return (
     <AlertDialog {...actions}>
       <AlertDialogContent className={cn(className && className)}>
@@ -59,7 +79,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
           <Button
             type={form ? 'submit' : 'button'}
             form={form}
-            onClick={handleConfirm}
+            onClick={confirmOnce}
             variant={destructive ? 'destructive' : 'default'}
             disabled={disabled || isLoading}
           >

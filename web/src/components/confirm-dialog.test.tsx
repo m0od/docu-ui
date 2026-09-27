@@ -221,4 +221,36 @@ describe('ConfirmDialog', () => {
     deleteButton.click()
     expect(handleFormSubmit).not.toHaveBeenCalled()
   })
+
+  // A double click must not run the work twice, but a failed attempt must leave the button
+  // usable, so the user can retry after reading the error.
+  it('confirms once while the work runs, and again after it failed', async () => {
+    let failWork: (error: Error) => void = () => {}
+    const handleConfirm = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          failWork = reject
+        })
+    )
+    const { getByRole } = await render(
+      <ConfirmDialog
+        open
+        onOpenChange={vi.fn()}
+        title='Apply'
+        desc='...'
+        confirmText='Apply'
+        handleConfirm={handleConfirm}
+      />
+    )
+    const confirm = getByRole('button', { name: 'Apply' })
+
+    await userEvent.dblClick(confirm)
+    expect(handleConfirm).toHaveBeenCalledOnce()
+
+    failWork(new Error('receiver down'))
+    await vi.waitFor(async () => {
+      await userEvent.click(confirm)
+      expect(handleConfirm).toHaveBeenCalledTimes(2)
+    })
+  })
 })

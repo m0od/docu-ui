@@ -278,7 +278,7 @@ function NotAppliedAlert({ fileName, version, target }: NotAppliedAlertProps) {
         desc={confirmText}
         confirmText='Apply'
         isLoading={apply.isPending}
-        handleConfirm={() => apply.mutate()}
+        handleConfirm={() => apply.mutateAsync()}
       >
         {apply.isError && (
           <p role='alert' className='text-sm font-medium text-destructive'>

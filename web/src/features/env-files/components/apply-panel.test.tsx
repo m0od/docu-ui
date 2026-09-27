@@ -415,4 +415,27 @@ describe('ApplyPanel', () => {
       .element(screen.getByRole('alert'))
       .toHaveTextContent('cannot read settings')
   })
+
+  // A double click on Apply must recreate the containers once, not restart them twice.
+  it('applies once on a double click', async () => {
+    vi.mocked(fetchApplyState).mockResolvedValueOnce({
+      target: {
+        adapter: 'doco-cd',
+        project: 'shop-dev',
+        services: [],
+        webhook: NO_WEBHOOK,
+      },
+      appliedVersion: 'version-1',
+    })
+    vi.mocked(applyEnvFile).mockReturnValue(new Promise(() => {}))
+    const screen = await renderPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    await userEvent.dblClick(
+      screen.getByRole('alertdialog').getByRole('button', { name: 'Apply' })
+    )
+
+    await vi.waitFor(() => expect(applyEnvFile).toHaveBeenCalled())
+    expect(applyEnvFile).toHaveBeenCalledOnce()
+  })
 })
