@@ -110,8 +110,9 @@ export function EnvFileView() {
                   </Button>
                 </div>
                 <EnvVariablesEditor
-                  // A new version (after a save) starts a fresh editor.
-                  key={envFile.data.version}
+                  // Another file starts a fresh editor; a new version of the same file
+                  // (reload after a conflict) keeps the unsaved changes.
+                  key={fileName}
                   fileName={fileName}
                   version={envFile.data.version}
                   variables={envFile.data.variables}
