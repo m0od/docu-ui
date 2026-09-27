@@ -202,7 +202,9 @@ func TestReenablingTOTPReplacesRecoveryCodes(tester *testing.T) {
 	if disabled := sendJSON(handler, http.MethodPost, "/api/account/totp/disable", confirmBody(adminPassword, "969429"), sessionCookie); disabled.Code != http.StatusNoContent {
 		tester.Fatalf("disable: %d %s", disabled.Code, disabled.Body.String())
 	}
+	// Years later on the test clock: the session has gone idle, so sign in again (TOTP is off now).
 	setClock(tester, time.Unix(1111111109, 0)) // RFC 6238: the code is 081804
+	sessionCookie = sessionCookieFrom(tester, sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, "")))
 	secondSet := enableTOTP("081804")
 
 	if left := recoveryCodesLeft(tester, handler, sessionCookie); left != float64(auth.RecoveryCodeCount) {

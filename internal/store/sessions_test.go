@@ -14,17 +14,17 @@ func TestSessionLifecycle(tester *testing.T) {
 	if err := testStore.CreateSession(ctx, "hash-1", admin.ID, now, now.Add(time.Hour)); err != nil {
 		tester.Fatal(err)
 	}
-	if username, err := testStore.FindSessionUsername(ctx, "hash-1", now); err != nil || username != "admin" {
+	if username, err := testStore.UseSession(ctx, "hash-1", now, time.Hour); err != nil || username != "admin" {
 		tester.Fatalf("live session: %q %v", username, err)
 	}
 	// Expired sessions must not authenticate, even before cleanup removes them.
-	if _, err := testStore.FindSessionUsername(ctx, "hash-1", now.Add(time.Hour)); !errors.Is(err, ErrSessionNotFound) {
+	if _, err := testStore.UseSession(ctx, "hash-1", now.Add(time.Hour), time.Hour); !errors.Is(err, ErrSessionNotFound) {
 		tester.Fatalf("expired session: %v", err)
 	}
 	if err := testStore.DeleteSession(ctx, "hash-1"); err != nil {
 		tester.Fatal(err)
 	}
-	if _, err := testStore.FindSessionUsername(ctx, "hash-1", now); !errors.Is(err, ErrSessionNotFound) {
+	if _, err := testStore.UseSession(ctx, "hash-1", now, time.Hour); !errors.Is(err, ErrSessionNotFound) {
 		tester.Fatalf("signed-out session still valid: %v", err)
 	}
 }
@@ -51,8 +51,8 @@ func TestSessionQueriesFailAfterClose(tester *testing.T) {
 	if err := testStore.CreateSession(ctx, "hash", admin.ID, now, now); err == nil {
 		tester.Error("CreateSession should fail")
 	}
-	if _, err := testStore.FindSessionUsername(ctx, "hash", now); err == nil || errors.Is(err, ErrSessionNotFound) {
-		tester.Errorf("FindSessionUsername: %v", err)
+	if _, err := testStore.UseSession(ctx, "hash", now, time.Hour); err == nil || errors.Is(err, ErrSessionNotFound) {
+		tester.Errorf("UseSession: %v", err)
 	}
 	if err := testStore.DeleteSession(ctx, "hash"); err == nil {
 		tester.Error("DeleteSession should fail")
@@ -75,10 +75,46 @@ func TestDeleteOtherSessionsKeepsTheCurrentOne(tester *testing.T) {
 	if err := testStore.DeleteOtherSessions(ctx, admin.ID, "current"); err != nil {
 		tester.Fatal(err)
 	}
-	if _, err := testStore.FindSessionUsername(ctx, "current", now); err != nil {
+	if _, err := testStore.UseSession(ctx, "current", now, time.Hour); err != nil {
 		tester.Fatalf("current: %v", err)
 	}
-	if _, err := testStore.FindSessionUsername(ctx, "stolen", now); !errors.Is(err, ErrSessionNotFound) {
+	if _, err := testStore.UseSession(ctx, "stolen", now, time.Hour); !errors.Is(err, ErrSessionNotFound) {
 		tester.Fatalf("stolen: %v", err)
+	}
+}
+
+// Idle timeout: a session left unused for idleTimeout is over, while each use pushes that limit back.
+func TestSessionEndsAfterIdleTimeout(tester *testing.T) {
+	testStore, admin := storeWithAdmin(tester)
+	ctx := context.Background()
+	signedInAt := time.Unix(1_000_000, 0)
+	testStore.CreateSession(ctx, "hash-1", admin.ID, signedInAt, signedInAt.Add(8*time.Hour))
+	for _, usedAfter := range []time.Duration{29 * time.Minute, 58 * time.Minute} {
+		if _, err := testStore.UseSession(ctx, "hash-1", signedInAt.Add(usedAfter), 30*time.Minute); err != nil {
+			tester.Fatalf("used after %v: %v", usedAfter, err)
+		}
+	}
+	// 30 minutes after the last use (at 58 min) the session is gone, and using it again does not revive it.
+	for _, usedAfter := range []time.Duration{88 * time.Minute, 89 * time.Minute} {
+		if _, err := testStore.UseSession(ctx, "hash-1", signedInAt.Add(usedAfter), 30*time.Minute); !errors.Is(err, ErrSessionNotFound) {
+			tester.Fatalf("used after %v: %v", usedAfter, err)
+		}
+	}
+}
+
+// Absolute timeout: however active, a session ends at its expiry, so a stolen cookie is not good forever.
+func TestActiveSessionStillExpires(tester *testing.T) {
+	testStore, admin := storeWithAdmin(tester)
+	ctx := context.Background()
+	signedInAt := time.Unix(1_000_000, 0)
+	expiresAt := signedInAt.Add(8 * time.Hour)
+	testStore.CreateSession(ctx, "hash-1", admin.ID, signedInAt, expiresAt)
+	for usedAt := signedInAt; usedAt.Before(expiresAt); usedAt = usedAt.Add(20 * time.Minute) {
+		if _, err := testStore.UseSession(ctx, "hash-1", usedAt, 30*time.Minute); err != nil {
+			tester.Fatalf("at %v: %v", usedAt.Sub(signedInAt), err)
+		}
+	}
+	if _, err := testStore.UseSession(ctx, "hash-1", expiresAt, 30*time.Minute); !errors.Is(err, ErrSessionNotFound) {
+		tester.Fatalf("at expiry: %v", err)
 	}
 }

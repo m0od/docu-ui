@@ -15,7 +15,10 @@ import (
 
 const (
 	sessionCookieName = "docu_session"
-	sessionLifetime   = 12 * time.Hour
+	// OWASP session timeouts: 30 minutes without a request ends a session (idle), and none lives
+	// past 8 hours however active (absolute), so a stolen cookie is good for a working day at most.
+	sessionIdleTimeout = 30 * time.Minute
+	sessionMaxLifetime = 8 * time.Hour
 	// Five wrong passwords or TOTP codes lock the account for 15 minutes: slow enough to stop
 	// guessing, short enough that a locked-out admin just waits.
 	maxFailedLogins  = 5
@@ -104,7 +107,7 @@ func (handlers authHandlers) signIn(writer http.ResponseWriter, request *http.Re
 	}
 
 	sessionToken := auth.RandomToken(32)
-	expiresAt := currentTime.Add(sessionLifetime)
+	expiresAt := currentTime.Add(sessionMaxLifetime)
 	if err := handlers.store.ResetFailedLogins(ctx, account.ID); err != nil {
 		writeError(writer, http.StatusInternalServerError, "cannot save sign-in")
 		return
@@ -166,7 +169,7 @@ func (handlers authHandlers) requireSession(next func(http.ResponseWriter, *http
 			writeError(writer, http.StatusUnauthorized, "not signed in")
 			return
 		}
-		username, err := handlers.store.FindSessionUsername(request.Context(), hashSessionToken(sessionCookie.Value), now())
+		username, err := handlers.store.UseSession(request.Context(), hashSessionToken(sessionCookie.Value), now(), sessionIdleTimeout)
 		if errors.Is(err, store.ErrSessionNotFound) {
 			writeError(writer, http.StatusUnauthorized, "session expired: sign in again")
 			return

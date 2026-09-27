@@ -28,7 +28,7 @@ type Store interface {
 	ResetFailedLogins(ctx context.Context, accountID int64) error
 	UseTOTPStep(ctx context.Context, accountID, timeStep int64) (bool, error)
 	CreateSession(ctx context.Context, tokenHash string, accountID int64, now, expiresAt time.Time) error
-	FindSessionUsername(ctx context.Context, tokenHash string, now time.Time) (string, error)
+	UseSession(ctx context.Context, tokenHash string, now time.Time, idleTimeout time.Duration) (string, error)
 	DeleteSession(ctx context.Context, tokenHash string) error
 	DeleteOtherSessions(ctx context.Context, accountID int64, keepTokenHash string) error
 	SetPassword(ctx context.Context, accountID int64, passwordHash string) error
