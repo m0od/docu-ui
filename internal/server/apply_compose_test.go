@@ -58,7 +58,7 @@ func TestApplyThroughCompose(tester *testing.T) {
 		tester.Fatalf("apply: %d %s", applied.Code, applied.Body.String())
 	}
 	content, _ := os.ReadFile(callLog)
-	if !strings.Contains(string(content), "compose --project-name shop-dev --project-directory /srv/shop --file /srv/shop/compose.yml up --detach --force-recreate --no-deps api\n") {
+	if !strings.Contains(string(content), "compose --project-name shop-dev --project-directory /srv/shop --file /srv/shop/compose.yml up --detach --force-recreate --no-deps -- api\n") {
 		tester.Fatalf("calls:\n%s", content)
 	}
 }
@@ -82,5 +82,33 @@ func TestApplyThroughComposeFails(tester *testing.T) {
 	state := sendJSON(handler, http.MethodGet, "/api/env-files/api.env/apply-target", "", sessionCookie)
 	if responseField(tester, state, "appliedVersion") == version {
 		tester.Fatal("a failed apply must not count as applied")
+	}
+}
+
+// Project and service names end up as docker compose arguments, and the Docker socket is root on the
+// host: a name starting with "-" would be read as a flag (--privileged, --project-directory=/).
+func TestApplyTargetRefusesNamesThatLookLikeFlags(tester *testing.T) {
+	handler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
+	envFolderWith(tester, handler, sessionCookie)
+	if saved := sendJSON(handler, http.MethodPut, "/api/env-files/api.env/apply-target", composeTargetBody("shop-dev"), sessionCookie); saved.Code != http.StatusOK {
+		tester.Fatalf("valid target: %d %s", saved.Code, saved.Body.String())
+	}
+	flagLikeTargets := []map[string]any{
+		{"project": "shop-dev", "services": []string{"--privileged"}},
+		{"project": "shop-dev", "services": []string{"-d"}},
+		{"project": "shop-dev", "services": []string{"api", "--build"}},
+		{"project": "shop-dev", "services": []string{"--project-directory=/"}},
+		{"project": "-p", "services": []string{"api"}},
+		{"project": "--x", "services": []string{"api"}},
+	}
+	for _, target := range flagLikeTargets {
+		target["adapter"] = "compose"
+		if response := sendJSON(handler, http.MethodPut, "/api/env-files/api.env/apply-target", editorBody(target), sessionCookie); response.Code != http.StatusBadRequest {
+			tester.Errorf("%v: got %d %s", target, response.Code, response.Body.String())
+		}
+	}
+	saved := sendJSON(handler, http.MethodGet, "/api/env-files/api.env/apply-target", "", sessionCookie)
+	if !strings.Contains(saved.Body.String(), `"project":"shop-dev"`) || !strings.Contains(saved.Body.String(), `"services":["api"]`) {
+		tester.Fatalf("the saved target changed: %s", saved.Body.String())
 	}
 }

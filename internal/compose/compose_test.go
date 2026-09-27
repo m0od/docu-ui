@@ -49,7 +49,7 @@ func TestRecreateUsesTheFilesFromTheLabels(tester *testing.T) {
 	}
 	expected := []string{
 		`ps --all --filter label=com.docker.compose.project=shop-dev --format {{.Label "com.docker.compose.project.working_dir"}}|{{.Label "com.docker.compose.project.config_files"}}|{{.Label "com.docker.compose.project.environment_file"}}`,
-		"compose --project-name shop-dev --project-directory /srv/shop --file /srv/shop/compose.yml --file /srv/shop/compose.dev.yml --env-file /srv/shop/.env up --detach --force-recreate --no-deps api worker",
+		"compose --project-name shop-dev --project-directory /srv/shop --file /srv/shop/compose.yml --file /srv/shop/compose.dev.yml --env-file /srv/shop/.env up --detach --force-recreate --no-deps -- api worker",
 	}
 	if got := calls(tester, callLog); strings.Join(got, "\n") != strings.Join(expected, "\n") {
 		tester.Fatalf("got\n%s", strings.Join(got, "\n"))
@@ -63,7 +63,7 @@ func TestRecreateWholeProjectWithoutEnvFile(tester *testing.T) {
 	if err := Recreate(context.Background(), "app", nil); err != nil {
 		tester.Fatal(err)
 	}
-	if got := calls(tester, callLog)[1]; got != "compose --project-name app --project-directory /srv/app --file /srv/app/compose.yml up --detach --force-recreate --no-deps" {
+	if got := calls(tester, callLog)[1]; got != "compose --project-name app --project-directory /srv/app --file /srv/app/compose.yml up --detach --force-recreate --no-deps --" {
 		tester.Fatalf("got %s", got)
 	}
 }
@@ -108,5 +108,17 @@ func TestRecreateWithoutDocker(tester *testing.T) {
 	err := Recreate(context.Background(), "app", nil)
 	if err == nil || !strings.HasPrefix(err.Error(), "docker ps failed: ") {
 		tester.Fatalf("got %v", err)
+	}
+}
+
+// The API already refuses names starting with "-"; this is the second wall. Compose runs against a
+// root-equivalent Docker socket, so a name that slipped through as --privileged must stay a name.
+func TestRecreateNeverPassesServicesAsFlags(tester *testing.T) {
+	callLog := fakeDocker(tester, "/srv/app|/srv/app/compose.yml|\n", "")
+	if err := Recreate(context.Background(), "app", []string{"--privileged"}); err != nil {
+		tester.Fatal(err)
+	}
+	if got := calls(tester, callLog)[1]; !strings.HasSuffix(got, " --no-deps -- --privileged") {
+		tester.Fatalf("got %s", got)
 	}
 }

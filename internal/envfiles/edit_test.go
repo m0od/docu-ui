@@ -2,9 +2,11 @@ package envfiles
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -257,5 +259,77 @@ func TestApplyChangesWritesTheFile(tester *testing.T) {
 	}
 	if len(historyEntries(tester, folder)) != 1 {
 		tester.Fatal("rejected change wrote history")
+	}
+}
+
+// A symlink in the folder must not become a way to rewrite a host file outside the mount. The outside
+// file here is writable and the version matches it, so only the folder boundary stops the save
+// (the older /etc/hosts case also fails on permissions alone).
+func TestWriteRefusesSymlinkOutOfTheFolder(tester *testing.T) {
+	outsideContent := "HOST_SECRET=keep\n"
+	for linkName, linkTarget := range map[string]func(outsideFile string) string{
+		"absolute.env": func(outsideFile string) string { return outsideFile },
+		"relative.env": func(outsideFile string) string {
+			return filepath.Join("..", filepath.Base(filepath.Dir(outsideFile)), "host.env")
+		},
+	} {
+		parent := tester.TempDir()
+		outsideFile := filepath.Join(parent, "outside", "host.env")
+		os.Mkdir(filepath.Dir(outsideFile), 0o700)
+		writeFile(tester, outsideFile, outsideContent)
+		folder := filepath.Join(parent, "env")
+		os.Mkdir(folder, 0o700)
+		if err := os.Symlink(linkTarget(outsideFile), filepath.Join(folder, linkName)); err != nil {
+			tester.Fatal(err)
+		}
+
+		_, writeErr := WriteContent(folder, linkName, contentVersion(outsideContent), "admin", "HOST_SECRET=stolen\n")
+		_, changeErr := ApplyChanges(folder, linkName, contentVersion(outsideContent), "admin",
+			[]Change{{Key: "HOST_SECRET", Value: stringPointer("stolen")}})
+		if writeErr == nil || changeErr == nil {
+			tester.Errorf("%s: write %v, change %v", linkName, writeErr, changeErr)
+		}
+		if written, _ := os.ReadFile(outsideFile); string(written) != outsideContent {
+			tester.Errorf("%s: the outside file became %q", linkName, written)
+		}
+		if _, err := os.Stat(filepath.Join(folder, historyFolder)); !errors.Is(err, os.ErrNotExist) {
+			tester.Errorf("%s: a history entry was written for a refused save", linkName)
+		}
+	}
+}
+
+// README: "if someone saved the same file in the meantime, the save is refused". Saves that arrive
+// together must not all pass the version check and silently overwrite each other.
+func TestConcurrentSavesOfOneVersionLetOneWin(tester *testing.T) {
+	folder, version := editableFolder(tester, "A=0\n")
+	const saveCount = 20
+	savedContents := make([]string, saveCount)
+	saveErrors := make([]error, saveCount)
+	var saves sync.WaitGroup
+	for saveIndex := range saveCount {
+		saves.Add(1)
+		go func() {
+			defer saves.Done()
+			content := fmt.Sprintf("A=%d\n", saveIndex+1)
+			if _, saveErrors[saveIndex] = WriteContent(folder, "api.env", version, "admin", content); saveErrors[saveIndex] == nil {
+				savedContents[saveIndex] = content
+			}
+		}()
+	}
+	saves.Wait()
+
+	var winners []string
+	for saveIndex, saveErr := range saveErrors {
+		if saveErr == nil {
+			winners = append(winners, savedContents[saveIndex])
+		} else if !errors.Is(saveErr, ErrConflict) {
+			tester.Errorf("save %d: %v", saveIndex, saveErr)
+		}
+	}
+	if len(winners) != 1 {
+		tester.Fatalf("%d saves succeeded from the same version", len(winners))
+	}
+	if readBack(tester, folder) != winners[0] || len(historyEntries(tester, folder)) != 1 {
+		tester.Fatalf("file %q, winner %q, %d history entries", readBack(tester, folder), winners[0], len(historyEntries(tester, folder)))
 	}
 }

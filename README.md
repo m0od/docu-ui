@@ -107,7 +107,7 @@ which reloads the Compose project, so the new `env_file` values reach the contai
 
 #### Docker Compose
 
-Docu-UI runs `docker compose up --detach --force-recreate --no-deps <services>` itself; the image ships the Docker CLI and Compose plugin.
+Docu-UI runs `docker compose up --detach --force-recreate --no-deps -- <services>` itself; the image ships the Docker CLI and Compose plugin.
 Compose re-reads every `env_file` while recreating, so the containers start with the saved values.
 You only enter the project name: Docu-UI finds the compose files, working directory and project `.env`
 in the `com.docker.compose.project.*` labels of the project's containers, so the project must have been started once with `docker compose`.
