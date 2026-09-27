@@ -40,6 +40,9 @@ The setup page closes for good once the first account exists; a new token is pri
 Later, **Settings → Account** changes the password (other sessions are signed out) and turns TOTP on or off.
 Both need the current password; turning TOTP off also needs a code.
 
+Five wrong passwords or codes (at sign-in or on these forms) lock the account for 15 minutes.
+While it is locked, sign-in answers *invalid username or password* even to the right one, so the answer never tells a stranger which usernames exist.
+
 Turning TOTP on (on the setup page or later) gives 10 one-time **recovery codes**. Keep them somewhere other than the phone:
 if the phone is lost, a recovery code works once wherever a TOTP code is asked. Only their hashes are stored.
 **Settings → Account** shows how many are left and creates a new set (password and a code needed); the old set stops working at once.

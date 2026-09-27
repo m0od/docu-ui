@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
-	"math"
 	"net/http"
 	"sync"
 	"time"
@@ -77,9 +75,11 @@ func (handlers authHandlers) signIn(writer http.ResponseWriter, request *http.Re
 		writeError(writer, http.StatusInternalServerError, "cannot read accounts")
 		return
 	}
+	// A locked account answers like a wrong password, after the same slow check: a different status
+	// or a faster answer would tell a stranger that the username exists.
 	if account.LockedUntil.After(currentTime) {
-		minutesLeft := int(math.Ceil(account.LockedUntil.Sub(currentTime).Minutes()))
-		writeError(writer, http.StatusTooManyRequests, fmt.Sprintf("too many failed sign-ins: try again in %d minute(s)", minutesLeft))
+		_, _ = auth.VerifyPassword(signInInput.Password, account.PasswordHash)
+		writeError(writer, http.StatusUnauthorized, invalidLogin)
 		return
 	}
 	if passwordMatched, _ := auth.VerifyPassword(signInInput.Password, account.PasswordHash); !passwordMatched {

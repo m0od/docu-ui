@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -205,5 +207,80 @@ func TestTurnOffSignInReportsStoreErrors(tester *testing.T) {
 	handler := newAuthServer(tester, Config{Store: failingStore{Store: testStore, failingMethod: "TurnOffSignIn"}})
 	if response := sendJSON(handler, http.MethodPost, "/api/account/sign-in/disable", editorBody(map[string]any{"currentPassword": adminPassword}), sessionCookie); response.Code != http.StatusInternalServerError {
 		tester.Fatalf("got %d", response.Code)
+	}
+}
+
+// With sign-in off there is no cookie for SameSite to protect, so the JSON content type is all that
+// stops any web page the owner visits from posting to Docu-UI: browsers send text/plain, form and
+// multipart bodies cross-site without asking, but not application/json. Every write route must refuse
+// them, in both modes, before doing anything.
+func TestWriteRoutesRefuseCrossSiteContentTypes(tester *testing.T) {
+	writeRoutes := [][2]string{
+		{http.MethodPost, "/api/setup"},
+		{http.MethodPost, "/api/auth/login"},
+		{http.MethodPut, "/api/settings/env-folder"},
+		{http.MethodPatch, "/api/env-files/api.env/variables"},
+		{http.MethodPut, "/api/env-files/api.env/content"},
+		{http.MethodPost, "/api/env-files/api.env/history/20260925T080000.000000000Z_admin.env/restore"},
+		{http.MethodPut, "/api/settings/doco-cd"},
+		{http.MethodPut, "/api/settings/webhook"},
+		{http.MethodPut, "/api/env-files/api.env/apply-target"},
+		{http.MethodPost, "/api/env-files/api.env/apply"},
+		{http.MethodPut, "/api/account/password"},
+		{http.MethodPost, "/api/account/totp"},
+		{http.MethodPost, "/api/account/totp/disable"},
+		{http.MethodPost, "/api/account/recovery-codes"},
+		{http.MethodPost, "/api/account/sign-in"},
+		{http.MethodPost, "/api/account/sign-in/disable"},
+	}
+	crossSiteContentTypes := []string{"text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", ""}
+	// Valid for the route that would hurt most: turning sign-in on with the attacker's password.
+	attackBody := `{"username":"intruder","password":"intruder-password","folder":"/"}`
+
+	signInOffStore := openSignInOffStore(tester)
+	signInOffHandler := newAuthServer(tester, Config{Store: signInOffStore})
+	signedInHandler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
+	modes := map[string]struct {
+		handler http.Handler
+		cookies []*http.Cookie
+	}{
+		"sign-in off": {signInOffHandler, nil},
+		"signed in":   {signedInHandler, []*http.Cookie{sessionCookie}},
+	}
+	for modeName, mode := range modes {
+		for _, route := range writeRoutes {
+			for _, contentType := range crossSiteContentTypes {
+				recorder := httptest.NewRecorder()
+				request := httptest.NewRequest(route[0], route[1], strings.NewReader(attackBody))
+				if contentType != "" {
+					request.Header.Set("Content-Type", contentType)
+				}
+				for _, cookie := range mode.cookies {
+					request.AddCookie(cookie)
+				}
+				mode.handler.ServeHTTP(recorder, request)
+				if recorder.Code != http.StatusUnsupportedMediaType {
+					tester.Errorf("%s, %s %s as %q: got %d %s", modeName, route[0], route[1], contentType, recorder.Code, recorder.Body.String())
+				}
+			}
+		}
+	}
+	if signInOff, _ := signInOffStore.SignInOff(context.Background()); !signInOff {
+		tester.Fatal("a cross-site post turned sign-in on")
+	}
+	if folder, _ := signInOffStore.EnvFolder(context.Background()); folder != "" {
+		tester.Fatalf("a cross-site post set the env folder to %q", folder)
+	}
+}
+
+// A charset parameter is still JSON: the check must not refuse what the UI and API clients send.
+func TestJSONWithCharsetIsAccepted(tester *testing.T) {
+	handler := newAuthServer(tester, Config{Store: openSignInOffStore(tester)})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPut, "/api/settings/env-folder", strings.NewReader(envFolderBody(tester.TempDir())))
+	request.Header.Set("Content-Type", "application/json; charset=utf-8")
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		tester.Fatalf("got %d %s", recorder.Code, recorder.Body.String())
 	}
 }

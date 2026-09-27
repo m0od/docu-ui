@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,13 @@ type fakeAccounts struct {
 	recoveryHashes    []string
 	recoveryError     error
 	findError         error
+	usedTOTPStep      int64
+	useStepError      error
+}
+
+func (accounts *fakeAccounts) UseTOTPStep(_ context.Context, _ int64, timeStep int64) (bool, error) {
+	accounts.usedTOTPStep = timeStep
+	return true, accounts.useStepError
 }
 
 func (accounts *fakeAccounts) FindAccount(_ context.Context, username string) (store.Account, error) {
@@ -161,6 +169,7 @@ func TestSetupWithTOTPCannotSaveRecoveryCodes(tester *testing.T) {
 
 	for caseName, accounts := range map[string]*fakeAccounts{
 		"cannot read the new account": {findError: errors.New("disk gone")},
+		"cannot spend the setup code": {useStepError: errors.New("disk full")},
 		"cannot save the codes":       {recoveryError: errors.New("disk full")},
 	} {
 		recorder := postSetup(newSetupServer(tester, accounts, testSetupToken), "application/json",
@@ -264,5 +273,30 @@ func TestUnknownAPIPathIsJSON404(tester *testing.T) {
 	response := get(tester, mustNew(tester, ""), "/api/nope")
 	if response.StatusCode != http.StatusNotFound || response.Header.Get("Content-Type") != "application/json" {
 		tester.Fatalf("got %d %s", response.StatusCode, response.Header.Get("Content-Type"))
+	}
+}
+
+// The code typed on the setup page is spent: someone who saw it over the admin's shoulder cannot
+// sign in with it during its 30s window.
+func TestSetupCodeCannotSignIn(tester *testing.T) {
+	setupStore, err := store.Open(filepath.Join(tester.TempDir(), "docu-ui.db"))
+	if err != nil {
+		tester.Fatal(err)
+	}
+	tester.Cleanup(func() { setupStore.Close() })
+	setClock(tester, time.Unix(59, 0))
+	handler := newAuthServer(tester, Config{Store: setupStore, SetupToken: testSetupToken})
+
+	setupResult := postSetup(handler, "application/json", setupBody(map[string]string{"totpSecret": authTestSecret, "totpCode": "287082"}))
+	if setupResult.Code != http.StatusCreated {
+		tester.Fatalf("setup: %d %s", setupResult.Code, setupResult.Body.String())
+	}
+	replayed := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", "a-long-password", "287082"))
+	if replayed.Code != http.StatusUnauthorized || !strings.Contains(replayed.Body.String(), "already used") {
+		tester.Fatalf("setup code reused: %d %s", replayed.Code, replayed.Body.String())
+	}
+	setClock(tester, time.Unix(119, 0))
+	if nextCode := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", "a-long-password", "969429")); nextCode.Code != http.StatusOK {
+		tester.Fatalf("next code: %d %s", nextCode.Code, nextCode.Body.String())
 	}
 }

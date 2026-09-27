@@ -132,7 +132,7 @@ func (handlers setupHandlers) createFirstAccount(writer http.ResponseWriter, req
 		writeJSON(writer, http.StatusCreated, map[string]string{"username": setupInput.Username})
 		return
 	}
-	recoveryCodes, err := handlers.issueFirstRecoveryCodes(request, setupInput.Username)
+	recoveryCodes, err := handlers.finishTOTPSetup(request, setupInput)
 	if err != nil {
 		writeError(writer, http.StatusInternalServerError, "account created, but cannot save recovery codes: create them on the account page")
 		return
@@ -140,9 +140,15 @@ func (handlers setupHandlers) createFirstAccount(writer http.ResponseWriter, req
 	writeJSON(writer, http.StatusCreated, map[string]any{"username": setupInput.Username, "recoveryCodes": recoveryCodes})
 }
 
-func (handlers setupHandlers) issueFirstRecoveryCodes(request *http.Request, username string) ([]string, error) {
-	account, err := handlers.accounts.FindAccount(request.Context(), username)
+// finishTOTPSetup spends the code typed on the setup page, so whoever saw it cannot sign in with it
+// in its 30s window, and gives the new account its recovery codes.
+func (handlers setupHandlers) finishTOTPSetup(request *http.Request, setupInput setupRequest) ([]string, error) {
+	account, err := handlers.accounts.FindAccount(request.Context(), setupInput.Username)
 	if err != nil {
+		return nil, err
+	}
+	codeStep, _ := auth.MatchTOTPStep(setupInput.TOTPSecret, setupInput.TOTPCode, now()) // validateSetup checked it
+	if _, err := handlers.accounts.UseTOTPStep(request.Context(), account.ID, codeStep); err != nil {
 		return nil, err
 	}
 	return issueRecoveryCodes(request.Context(), handlers.accounts, account.ID)

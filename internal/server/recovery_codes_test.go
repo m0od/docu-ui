@@ -164,3 +164,54 @@ func TestRecoveryCodesReportStoreFailures(tester *testing.T) {
 		tester.Fatalf("got %d %s", enabled.Code, enabled.Body.String())
 	}
 }
+
+// 50 bits per recovery code are out of reach only because wrong codes count toward the lockout too.
+// The wrong guesses, and the attempt made while locked, must not spend the real code.
+func TestWrongRecoveryCodesLockAccount(tester *testing.T) {
+	testStore := openAdminStore(tester, authTestSecret)
+	storeRecoveryCodes(tester, testStore, "abcde-fghij")
+	handler, sessionCookie := signedInWithTOTP(tester, testStore)
+	for attempt := 1; attempt <= maxFailedLogins; attempt++ {
+		signInCode(handler, adminPassword, "aaaaa-bbbbb")
+	}
+	locked := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, "abcde-fghij"))
+	if locked.Code != http.StatusUnauthorized || responseField(tester, locked, "error") != invalidLogin {
+		tester.Fatalf("while locked: %d %s", locked.Code, locked.Body.String())
+	}
+	if left := recoveryCodesLeft(tester, handler, sessionCookie); left != float64(1) {
+		tester.Fatalf("got %v codes left", left)
+	}
+}
+
+// Turning TOTP off and on again must not bring the old printout back to life:
+// the old set "stops working at once", whatever way the new one was made.
+func TestReenablingTOTPReplacesRecoveryCodes(tester *testing.T) {
+	handler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
+	enableTOTP := func(code string) []string {
+		tester.Helper()
+		enabled := sendJSON(handler, http.MethodPost, "/api/account/totp",
+			editorBody(map[string]any{"currentPassword": adminPassword, "secret": authTestSecret, "code": code}), sessionCookie)
+		if enabled.Code != http.StatusOK {
+			tester.Fatalf("enable: %d %s", enabled.Code, enabled.Body.String())
+		}
+		return recoveryCodesFrom(tester, enabled)
+	}
+	setClock(tester, time.Unix(59, 0))
+	firstSet := enableTOTP("287082")
+	setClock(tester, time.Unix(119, 0))
+	if disabled := sendJSON(handler, http.MethodPost, "/api/account/totp/disable", confirmBody(adminPassword, "969429"), sessionCookie); disabled.Code != http.StatusNoContent {
+		tester.Fatalf("disable: %d %s", disabled.Code, disabled.Body.String())
+	}
+	setClock(tester, time.Unix(1111111109, 0)) // RFC 6238: the code is 081804
+	secondSet := enableTOTP("081804")
+
+	if left := recoveryCodesLeft(tester, handler, sessionCookie); left != float64(auth.RecoveryCodeCount) {
+		tester.Fatalf("got %v codes left", left)
+	}
+	if signInCode(handler, adminPassword, firstSet[0]) != http.StatusUnauthorized {
+		tester.Fatal("a code from the old set signed in")
+	}
+	if signInCode(handler, adminPassword, secondSet[0]) != http.StatusOK {
+		tester.Fatal("a code from the new set must sign in")
+	}
+}

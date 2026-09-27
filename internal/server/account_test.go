@@ -201,3 +201,21 @@ func TestAccountReportsStoreFailures(tester *testing.T) {
 		}
 	}
 }
+
+// A stolen session must not be a way to guess the code: a wrong code on a confirmation form counts
+// toward the same lockout as sign-in, and the lock covers sign-in too.
+func TestWrongConfirmationCodesLockTheAccount(tester *testing.T) {
+	for _, route := range []string{"/api/account/totp/disable", "/api/account/recovery-codes", "/api/account/sign-in/disable"} {
+		handler, sessionCookie := signedInWithTOTP(tester, openAdminStore(tester, authTestSecret))
+		for attempt := 1; attempt <= maxFailedLogins; attempt++ {
+			sendJSON(handler, http.MethodPost, route, confirmBody(adminPassword, "000000"), sessionCookie)
+		}
+		setClock(tester, time.Unix(119, 0)) // the code is 969429
+		if locked := sendJSON(handler, http.MethodPost, route, confirmBody(adminPassword, "969429"), sessionCookie); locked.Code != http.StatusTooManyRequests {
+			tester.Errorf("%s: got %d %s", route, locked.Code, locked.Body.String())
+		}
+		if signIn := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, "969429")); responseField(tester, signIn, "error") != invalidLogin {
+			tester.Errorf("%s: sign-in not locked: %d %s", route, signIn.Code, signIn.Body.String())
+		}
+	}
+}

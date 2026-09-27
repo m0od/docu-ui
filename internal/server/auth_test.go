@@ -165,6 +165,7 @@ func TestSignInDoesNotRevealUsernames(tester *testing.T) {
 }
 
 // Five wrong passwords lock the account even for the right password, until the lock expires.
+// While locked it answers exactly like an unknown username: a "locked" answer would confirm the name exists.
 func TestFailedSignInsLockAccount(tester *testing.T) {
 	handler := newAuthServer(tester, Config{Store: openAdminStore(tester, "")})
 	startTime := time.Unix(1_000_000, 0)
@@ -173,8 +174,10 @@ func TestFailedSignInsLockAccount(tester *testing.T) {
 		sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", "guess", ""))
 	}
 	locked := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, ""))
-	if locked.Code != http.StatusTooManyRequests || !strings.Contains(locked.Body.String(), "15 minute") {
-		tester.Fatalf("while locked: %d %s", locked.Code, locked.Body.String())
+	unknownUser := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("nobody", adminPassword, ""))
+	if locked.Code != http.StatusUnauthorized || locked.Body.String() != unknownUser.Body.String() ||
+		len(locked.Result().Cookies()) != 0 {
+		tester.Fatalf("while locked: %d %s, unknown user: %s", locked.Code, locked.Body.String(), unknownUser.Body.String())
 	}
 	setClock(tester, startTime.Add(loginLockoutTime+time.Second))
 	if unlocked := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, "")); unlocked.Code != http.StatusOK {
@@ -390,4 +393,22 @@ func (failing failingStore) CountRecoveryCodes(ctx context.Context, accountID in
 		return 0, errStoreDown
 	}
 	return failing.Store.CountRecoveryCodes(ctx, accountID)
+}
+
+// Once the password is known, the lockout is the only limit on guessing the 6-digit code,
+// so wrong codes count like wrong passwords.
+func TestWrongTOTPCodesLockAccount(tester *testing.T) {
+	handler := newAuthServer(tester, Config{Store: openAdminStore(tester, authTestSecret)})
+	setClock(tester, time.Unix(1111111109, 0)) // RFC 6238: the code is 081804
+	for attempt := 1; attempt <= maxFailedLogins; attempt++ {
+		sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, "000000"))
+	}
+	locked := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, "081804"))
+	if locked.Code != http.StatusUnauthorized || responseField(tester, locked, "error") != invalidLogin || len(locked.Result().Cookies()) != 0 {
+		tester.Fatalf("while locked: %d %s", locked.Code, locked.Body.String())
+	}
+	setClock(tester, time.Unix(1234567890, 0)) // long after the lock; RFC 6238: the code is 005924
+	if signInCode(handler, adminPassword, "005924") != http.StatusOK {
+		tester.Fatal("the lock must expire")
+	}
 }
