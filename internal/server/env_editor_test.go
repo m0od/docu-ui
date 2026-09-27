@@ -78,7 +78,7 @@ func TestChangeVariables(tester *testing.T) {
 // The second of two editors working from the same version gets 409, and the first save stays.
 func TestStaleSaveIsRefused(tester *testing.T) {
 	handler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
-	envFolderWith(tester, handler, sessionCookie)
+	folder := envFolderWith(tester, handler, sessionCookie)
 	version := openForEdit(tester, handler, sessionCookie)
 	firstSave := editorBody(map[string]any{"baseVersion": version, "content": "A=1\n"})
 	if response := sendJSON(handler, http.MethodPut, "/api/env-files/api.env/content", firstSave, sessionCookie); response.Code != http.StatusOK {
@@ -88,6 +88,10 @@ func TestStaleSaveIsRefused(tester *testing.T) {
 	response := sendJSON(handler, http.MethodPatch, "/api/env-files/api.env/variables", secondSave, sessionCookie)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "reload") {
 		tester.Fatalf("got %d %s", response.Code, response.Body.String())
+	}
+	// The refused save must not touch the file: the first save stays, B is not added on top.
+	if content, _ := os.ReadFile(filepath.Join(folder, "api.env")); string(content) != "A=1\n" {
+		tester.Fatalf("file %q", content)
 	}
 }
 

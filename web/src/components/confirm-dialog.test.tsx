@@ -62,6 +62,9 @@ describe('ConfirmDialog', () => {
 
     const confirm = getByRole('button', { name: 'Continue' })
     await expect.element(confirm).toBeDisabled()
+    // A click that still reaches the button (a script, a stale focus) must not confirm.
+    const confirmButton = confirm.element() as HTMLButtonElement
+    confirmButton.click()
     expect(handleConfirm).not.toHaveBeenCalled()
   })
 
@@ -213,6 +216,9 @@ describe('ConfirmDialog', () => {
 
     const deleteBtn = getByRole('button', { name: 'Delete' })
     await expect.element(deleteBtn).toBeDisabled()
+    // Clicked anyway, the disabled submit button must not send the form.
+    const deleteButton = deleteBtn.element() as HTMLButtonElement
+    deleteButton.click()
     expect(handleFormSubmit).not.toHaveBeenCalled()
   })
 })

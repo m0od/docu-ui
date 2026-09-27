@@ -33,15 +33,28 @@ describe('AppearanceForm', () => {
   })
 
   // Unchanged choices are left alone, so saving does not re-trigger a theme switch.
-  it('leaves unchanged choices alone', async () => {
+  // Each case changes the other choice, so its call shows the submit has run.
+  it('leaves an unchanged theme alone', async () => {
     const screen = await render(<AppearanceForm />)
+    await userEvent.selectOptions(screen.getByLabelText('Font'), 'manrope')
     await userEvent.click(
       screen.getByRole('button', { name: 'Update preferences' })
     )
 
-    // Give the async form submit time to run before asserting nothing happened.
-    await new Promise((resolve) => setTimeout(resolve, 200))
-    expect(mocks.setFont).not.toHaveBeenCalled()
+    await vi.waitFor(() =>
+      expect(mocks.setFont).toHaveBeenCalledWith('manrope')
+    )
     expect(mocks.setTheme).not.toHaveBeenCalled()
+  })
+
+  it('leaves an unchanged font alone', async () => {
+    const screen = await render(<AppearanceForm />)
+    await userEvent.click(screen.getByText('Dark'))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Update preferences' })
+    )
+
+    await vi.waitFor(() => expect(mocks.setTheme).toHaveBeenCalledWith('dark'))
+    expect(mocks.setFont).not.toHaveBeenCalled()
   })
 })
