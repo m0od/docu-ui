@@ -1,4 +1,8 @@
 import { withQueryClient } from '@/test-utils/query-client'
+import {
+  returnToTabLater,
+  withProductionQueryClient,
+} from '@/test-utils/window-focus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
@@ -122,5 +126,52 @@ describe('EnvTextEditor', () => {
     await expect
       .element(screen.getByRole('alert'))
       .toHaveTextContent('env file not found')
+  })
+
+  // Every read shows all values and is logged as a view. Coming back to the tab must not read
+  // the file again: that would log a view nobody made, and a newer version would replace the draft.
+  it('does not read the file again when the tab regains focus', async () => {
+    vi.mocked(readEnvContent).mockResolvedValue({
+      content: 'A=1\n',
+      version: 'version-1',
+    })
+    const screen = await render(
+      withProductionQueryClient()(
+        <EnvTextEditor fileName='api.env' onClose={onClose} />
+      )
+    )
+    const textArea = screen.getByLabelText('Content of api.env')
+    await expect.element(textArea).toHaveValue('A=1\n')
+    await userEvent.fill(textArea, 'A=2\n')
+    vi.mocked(readEnvContent).mockResolvedValue({
+      content: 'A=1\nB=1\n',
+      version: 'version-2',
+    })
+
+    await returnToTabLater()
+
+    expect(readEnvContent).toHaveBeenCalledOnce()
+    await expect.element(textArea).toHaveValue('A=2\n')
+  })
+
+  // Opened again later, the editor reads the file again instead of showing secrets kept from
+  // the earlier visit, which may be out of date.
+  it('reads the file again each time it is opened', async () => {
+    vi.mocked(readEnvContent).mockResolvedValue({
+      content: 'A=1\n',
+      version: 'version-1',
+    })
+    const wrap = withProductionQueryClient()
+    const firstVisit = await render(
+      wrap(<EnvTextEditor fileName='api.env' onClose={onClose} />)
+    )
+    await expect
+      .element(firstVisit.getByLabelText('Content of api.env'))
+      .toHaveValue('A=1\n')
+    await firstVisit.unmount()
+
+    await render(wrap(<EnvTextEditor fileName='api.env' onClose={onClose} />))
+
+    await vi.waitFor(() => expect(readEnvContent).toHaveBeenCalledTimes(2))
   })
 })
