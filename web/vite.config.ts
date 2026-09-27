@@ -26,6 +26,10 @@ export default defineConfig({
   test: {
     silent: 'passed-only',
     unstubEnvs: true,
+    // Every test starts with empty call counts and the real functions behind vi.spyOn,
+    // even in a file that forgets to reset them.
+    clearMocks: true,
+    restoreMocks: true,
     browser: {
       enabled: true,
       provider: playwright(),

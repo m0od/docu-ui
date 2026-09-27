@@ -135,10 +135,14 @@ describe('EnvVariablesEditor', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove APP_DB' }))
 
-    await expect.element(screen.getByText('removed')).toBeInTheDocument()
-    await expect
-      .element(screen.getByText('overridden below'))
-      .toBeInTheDocument()
+    const overriddenRow = screen
+      .getByRole('row')
+      .filter({ hasText: 'overridden below' })
+    const activeRow = screen
+      .getByRole('row')
+      .filter({ hasText: 'APP_DB', hasNotText: 'overridden below' })
+    await expect.element(activeRow).toHaveTextContent('removed')
+    await expect.element(overriddenRow).not.toHaveTextContent('removed')
   })
 
   it('undoes a change on an existing variable', async () => {

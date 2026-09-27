@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/m0od/docu-ui/internal/envfiles"
 	"github.com/m0od/docu-ui/internal/store"
 )
 
@@ -229,13 +230,17 @@ func TestApplyErrors(tester *testing.T) {
 		{http.MethodPut, "/api/env-files/missing.env/apply-target", `{"adapter":"doco-cd","project":"shop-dev"}`, http.StatusNotFound},
 		{http.MethodPost, "/api/env-files/api.env/apply", "not json", http.StatusBadRequest},
 		{http.MethodPost, "/api/env-files/missing.env/apply", `{"version":"x"}`, http.StatusNotFound},
-		// The file changed after the page loaded: the user must see that change before it goes live.
-		{http.MethodPost, "/api/env-files/api.env/apply", `{"version":"stale"}`, http.StatusConflict},
 	}
 	for _, testCase := range testCases {
 		if response := sendJSON(handler, testCase.method, testCase.target, testCase.body, sessionCookie); response.Code != testCase.expectedCode {
 			tester.Errorf("%s %s %s: got %d %s", testCase.method, testCase.target, testCase.body, response.Code, response.Body.String())
 		}
+	}
+	// The file changed after the page loaded: the user must see that change before it goes live.
+	// Checked by message too, since "no target" or "no Doco-CD" would also answer 409.
+	stale := sendJSON(handler, http.MethodPost, "/api/env-files/api.env/apply", `{"version":"stale"}`, sessionCookie)
+	if stale.Code != http.StatusConflict || responseField(tester, stale, "error") != envfiles.ErrConflict.Error() {
+		tester.Errorf("stale version: got %d %s", stale.Code, stale.Body.String())
 	}
 	if len(*recreated) != 0 {
 		tester.Fatalf("nothing may be recreated on a refused request: %v", *recreated)
@@ -283,8 +288,9 @@ func TestApplyRoutesNeedTheFolder(tester *testing.T) {
 		if strings.HasSuffix(route[0], "/apply") {
 			method = http.MethodPost
 		}
-		if response := sendJSON(handler, method, route[0], route[1], sessionCookie); response.Code != http.StatusConflict {
-			tester.Errorf("%s: got %d", route[0], response.Code)
+		if response := sendJSON(handler, method, route[0], route[1], sessionCookie); response.Code != http.StatusConflict ||
+			responseField(tester, response, "error") != folderNotSet {
+			tester.Errorf("%s: got %d %s", route[0], response.Code, response.Body.String())
 		}
 	}
 }

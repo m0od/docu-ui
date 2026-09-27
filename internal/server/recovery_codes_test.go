@@ -92,6 +92,16 @@ func TestRecoveryCodeDisablesTOTP(tester *testing.T) {
 	if disabled := sendJSON(handler, http.MethodPost, "/api/account/totp/disable", confirmBody(adminPassword, "abcde-fghij"), sessionCookie); disabled.Code != http.StatusNoContent {
 		tester.Fatalf("disable: %d %s", disabled.Code, disabled.Body.String())
 	}
+	// TOTP is really off: the password alone signs in, and no recovery codes are left to count.
+	if account := sendJSON(handler, http.MethodGet, "/api/account", "", sessionCookie); responseField(tester, account, "totpEnabled") != false {
+		tester.Fatalf("account: %s", account.Body.String())
+	}
+	if left := recoveryCodesLeft(tester, handler, sessionCookie); left != nil {
+		tester.Fatalf("recovery codes left: %v", left)
+	}
+	if signInCode(handler, adminPassword, "") != http.StatusOK {
+		tester.Fatal("the password alone must sign in once TOTP is off")
+	}
 }
 
 // New codes replace the old set at once, so a leaked list stops working.
