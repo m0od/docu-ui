@@ -195,11 +195,11 @@ func TestEnvFileErrors(tester *testing.T) {
 	folder := envFolderWith(tester, handler, sessionCookie)
 	os.Symlink("/etc/hosts", filepath.Join(folder, "escape.env"))
 	expectedCodes := map[string]int{
-		"/api/env-files/..%2Fsecret.env":                 http.StatusBadRequest,
-		"/api/env-files/missing.env":                     http.StatusNotFound,
-		"/api/env-files/api.env/variables/MISSING":  http.StatusNotFound,
-		"/api/env-files/escape.env":                      http.StatusInternalServerError,
-		"/api/env-files/escape.env/variables/KEY":        http.StatusInternalServerError,
+		"/api/env-files/..%2Fsecret.env":                  http.StatusBadRequest,
+		"/api/env-files/missing.env":                      http.StatusNotFound,
+		"/api/env-files/api.env/variables/MISSING":        http.StatusNotFound,
+		"/api/env-files/escape.env":                       http.StatusInternalServerError,
+		"/api/env-files/escape.env/variables/KEY":         http.StatusInternalServerError,
 		"/api/env-files/..%2Fsecret.env/variables/APP_DB": http.StatusBadRequest,
 	}
 	for target, expectedCode := range expectedCodes {
