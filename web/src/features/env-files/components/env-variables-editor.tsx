@@ -89,7 +89,8 @@ export function EnvVariablesEditor({
           <TableBody>
             {variables.map((variable) => (
               <EnvVariableRow
-                key={variable.line}
+                // A new version hides values shown from the old one: they may have changed.
+                key={`${version}:${variable.line}`}
                 fileName={fileName}
                 variable={variable}
                 pendingValue={
