@@ -91,11 +91,35 @@ func TestDocoCDSettingsHideTheKey(tester *testing.T) {
 		tester.Fatalf("save: %d %s", saved.Code, saved.Body.String())
 	}
 	// The page cannot show the key, so saving with an empty key field must keep it.
-	sendJSON(handler, http.MethodPut, "/api/settings/doco-cd", editorBody(map[string]any{"url": "http://other:80"}), sessionCookie)
+	sendJSON(handler, http.MethodPut, "/api/settings/doco-cd", editorBody(map[string]any{"url": "http://doco-cd:80/"}), sessionCookie)
 	read := sendJSON(handler, http.MethodGet, "/api/settings/doco-cd", "", sessionCookie)
-	if responseField(tester, read, "url") != "http://other:80" || responseField(tester, read, "hasApiKey") != true ||
+	if responseField(tester, read, "url") != "http://doco-cd:80/" || responseField(tester, read, "hasApiKey") != true ||
 		strings.Contains(read.Body.String(), "api-key\"") {
 		tester.Fatalf("read: %s", read.Body.String())
+	}
+}
+
+// Keeping the key for a new host would let whoever edits the URL receive it on their own server.
+func TestDocoCDKeyIsNotKeptForAnotherHost(tester *testing.T) {
+	adminStore := openAdminStore(tester, "")
+	handler, sessionCookie := signedIn(tester, adminStore)
+	sendJSON(handler, http.MethodPut, "/api/settings/doco-cd",
+		editorBody(map[string]any{"url": "http://doco-cd:80", "apiKey": "api-key"}), sessionCookie)
+
+	for _, otherURL := range []string{"http://attacker.example:80", "http://doco-cd:8080", "https://doco-cd:80"} {
+		moved := sendJSON(handler, http.MethodPut, "/api/settings/doco-cd", editorBody(map[string]any{"url": otherURL}), sessionCookie)
+		if moved.Code != http.StatusBadRequest || !strings.Contains(moved.Body.String(), "enter the API secret again") {
+			tester.Errorf("%s: got %d %s", otherURL, moved.Code, moved.Body.String())
+		}
+	}
+	if saved, _ := adminStore.DocoCD(context.Background()); saved.URL != "http://doco-cd:80" || saved.APIKey != "api-key" {
+		tester.Fatalf("a refused save changed the settings: %+v", saved)
+	}
+	// With the key typed again, the move is fine.
+	moved := sendJSON(handler, http.MethodPut, "/api/settings/doco-cd",
+		editorBody(map[string]any{"url": "http://doco-cd-2:80", "apiKey": "new-key"}), sessionCookie)
+	if saved, _ := adminStore.DocoCD(context.Background()); moved.Code != http.StatusOK || saved.APIKey != "new-key" {
+		tester.Fatalf("got %d, saved %+v", moved.Code, saved)
 	}
 }
 
@@ -225,7 +249,7 @@ func TestApplyRoutesReportStoreFailures(tester *testing.T) {
 	version := readyToApply(tester, handler, sessionCookie, docoCD.URL, nil)
 	applyBody := editorBody(map[string]any{"version": version})
 	targetBody := editorBody(map[string]any{"adapter": "doco-cd", "project": "shop-dev"})
-	settingsBody := editorBody(map[string]any{"url": "http://doco-cd"})
+	settingsBody := editorBody(map[string]any{"url": docoCD.URL})
 	testCases := []struct {
 		failingMethod, method, target, body string
 	}{

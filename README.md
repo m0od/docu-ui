@@ -99,6 +99,7 @@ which reloads the Compose project, so the new `env_file` values reach the contai
 1. Enable the Doco-CD API by setting `API_SECRET` (or `API_SECRET_FILE`) on the Doco-CD container.
 2. In **Settings → Apply**, enter the Doco-CD URL as Docu-UI reaches it (e.g. `http://doco-cd:80` on a shared Docker network) and the API secret.
    The secret is stored in `/data/docu-ui.db` and never sent back to the browser.
+   Leave it empty to keep the saved one; moving the URL to another host (or scheme or port) needs the secret again.
 3. On a file's page, say which Compose project and services use it (no services: the whole project).
 
 #### Docker Compose
@@ -152,6 +153,10 @@ Any 2xx answer counts as applied; otherwise the status and the start of the answ
 - **Header** (optional): one extra header, e.g. a token the receiver or a gateway checks.
 
 Secrets and header values are stored in `/data/docu-ui.db` and never sent back to the browser; leave a field empty to keep the saved one.
+Moving the URL to another host (or scheme or port) needs them again, so a changed URL cannot carry them to someone else's server.
+
+Redirects are not followed, for Doco-CD and webhooks alike: they would send the secrets to the host the answer names.
+A `3xx` answer fails and shows where it points; enter that URL instead.
 
 After a save the page shows **Saved, not applied yet** with an **Apply** button. If applying fails, the reason is shown and the file stays marked as not applied.
 

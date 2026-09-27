@@ -3,6 +3,7 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 
 	"github.com/m0od/docu-ui/internal/store"
@@ -20,6 +21,8 @@ type webhookInput struct {
 }
 
 // merge validates the input and fills empty secret fields from saved; problem is "" when valid.
+// Saved secrets are only kept while the URL stays on the same host, so nobody who can edit
+// settings can point the webhook at their own server and receive them.
 func (input webhookInput) merge(saved store.Webhook) (merged store.Webhook, problem string) {
 	if !isHTTPURL(input.URL) {
 		return store.Webhook{}, "the webhook URL must look like https://ci.example.com/hook"
@@ -36,7 +39,20 @@ func (input webhookInput) merge(saved store.Webhook) (merged store.Webhook, prob
 	} else if merged.HeaderValue == "" {
 		merged.HeaderValue = saved.HeaderValue
 	}
+	keepsSavedSecret := (input.Secret == "" && merged.Secret != "") || (input.HeaderValue == "" && merged.HeaderValue != "")
+	if keepsSavedSecret && !sameOrigin(saved.URL, input.URL) {
+		return store.Webhook{}, newHostNeedsSecrets
+	}
 	return merged, ""
+}
+
+const newHostNeedsSecrets = "the URL points to another host: enter the secret and header value again"
+
+// sameOrigin says whether two URLs have the same scheme, host and port.
+func sameOrigin(savedURL, newURL string) bool {
+	parsedSaved, savedErr := url.Parse(savedURL)
+	parsedNew, newErr := url.Parse(newURL)
+	return savedErr == nil && newErr == nil && parsedSaved.Scheme == parsedNew.Scheme && parsedSaved.Host == parsedNew.Host
 }
 
 // webhookView is a webhook as the page may see it: whether secrets are set, never their values.

@@ -77,3 +77,22 @@ func TestRecreateConnectionErrors(tester *testing.T) {
 		tester.Errorf("unreachable Doco-CD: %v", err)
 	}
 }
+
+// A redirect would carry the API key to whatever host the answer names, and turn the POST into
+// a GET whose 200 looks like a recreate. So Docu-UI stops at the 3xx and tells the user where it points.
+func TestRecreateDoesNotFollowRedirects(tester *testing.T) {
+	otherHost, otherHostRequest := fakeDocoCD(tester, http.StatusOK, "")
+	redirecting := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		http.Redirect(writer, request, otherHost.URL+"/steal", http.StatusMovedPermanently)
+	}))
+	tester.Cleanup(redirecting.Close)
+
+	err := Recreate(context.Background(), redirecting.URL, "secret-key", "shop-dev", "api")
+	want := "doco-cd answered 301, redirecting to " + otherHost.URL + "/steal: use that URL"
+	if err == nil || err.Error() != want {
+		tester.Fatalf("got %v, want %q", err, want)
+	}
+	if otherHostRequest.Method != "" {
+		tester.Fatalf("the other host got %s %s", otherHostRequest.Method, otherHostRequest.URL)
+	}
+}

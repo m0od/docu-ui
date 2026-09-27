@@ -13,7 +13,12 @@ import (
 )
 
 // Recreating stops and starts containers and may pull images, so it can take minutes.
-var httpClient = &http.Client{Timeout: 5 * time.Minute}
+// Redirects are not followed: the API key would go to whatever host the answer names,
+// and the POST would turn into a GET whose 200 looks like success.
+var httpClient = &http.Client{
+	Timeout:       5 * time.Minute,
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
 
 // Recreate asks Doco-CD to force-recreate service in project, or the whole project when service is "".
 // Doco-CD reloads the Compose project first, so env_file changes reach the new containers.
@@ -34,6 +39,9 @@ func Recreate(ctx context.Context, baseURL, apiKey, project, service string) err
 	defer response.Body.Close()
 	if response.StatusCode/100 == 2 {
 		return nil
+	}
+	if location := response.Header.Get("Location"); location != "" {
+		return fmt.Errorf("doco-cd answered %d, redirecting to %s: use that URL", response.StatusCode, location)
 	}
 	return fmt.Errorf("doco-cd answered %d: %s", response.StatusCode, errorMessage(response.Body))
 }

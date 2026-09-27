@@ -191,3 +191,66 @@ func TestWebhookRoutesReportStoreFailures(tester *testing.T) {
 		}
 	}
 }
+
+// Keeping saved secrets for a new host would let whoever edits the URL receive them on their own server.
+func TestWebhookSecretsAreNotKeptForAnotherHost(tester *testing.T) {
+	adminStore := openAdminStore(tester, "")
+	handler, sessionCookie := signedIn(tester, adminStore)
+	envFolderWith(tester, handler, sessionCookie)
+	savedHook := map[string]any{"url": "https://ci.example/hook", "secret": "hmac-secret", "headerName": "Authorization", "headerValue": "Bearer ci-token"}
+	sendJSON(handler, http.MethodPut, "/api/settings/webhook", editorBody(savedHook), sessionCookie)
+	targetURL := "/api/env-files/api.env/apply-target"
+	sendJSON(handler, http.MethodPut, targetURL, webhookTargetBody("", savedHook), sessionCookie)
+
+	movedWithoutSecrets := []map[string]any{
+		{"url": "https://attacker.example/hook", "headerName": "Authorization"},
+		// Typing only the secret still keeps the saved header value, which is a token too.
+		{"url": "https://attacker.example/hook", "secret": "new-secret", "headerName": "Authorization"},
+		{"url": "https://attacker.example/hook", "headerName": "Authorization", "headerValue": "Bearer new"},
+		{"url": "http://ci.example/hook", "headerName": "Authorization"},
+	}
+	for _, movedHook := range movedWithoutSecrets {
+		shared := sendJSON(handler, http.MethodPut, "/api/settings/webhook", editorBody(movedHook), sessionCookie)
+		own := sendJSON(handler, http.MethodPut, targetURL, webhookTargetBody("", movedHook), sessionCookie)
+		for routeName, response := range map[string]*httptest.ResponseRecorder{"shared": shared, "own": own} {
+			if response.Code != http.StatusBadRequest || responseField(tester, response, "error") != newHostNeedsSecrets {
+				tester.Errorf("%s %v: got %d %s", routeName, movedHook, response.Code, response.Body.String())
+			}
+		}
+	}
+	shared, _ := adminStore.Webhook(tester.Context())
+	target, _ := adminStore.ApplyTarget(tester.Context(), "api.env")
+	if shared.URL != "https://ci.example/hook" || target.Webhook.URL != "https://ci.example/hook" || target.Webhook.Secret != "hmac-secret" {
+		tester.Fatalf("a refused save changed the settings: shared %+v, own %+v", shared, target.Webhook)
+	}
+
+	// Another path on the same host keeps them; a new host works once both are typed again.
+	samePath := sendJSON(handler, http.MethodPut, "/api/settings/webhook",
+		editorBody(map[string]any{"url": "https://ci.example/other", "headerName": "Authorization"}), sessionCookie)
+	movedHook := map[string]any{"url": "https://ci-2.example/hook", "secret": "new-secret", "headerName": "Authorization", "headerValue": "Bearer new"}
+	moved := sendJSON(handler, http.MethodPut, "/api/settings/webhook", editorBody(movedHook), sessionCookie)
+	if samePath.Code != http.StatusOK || moved.Code != http.StatusOK {
+		tester.Fatalf("same host %d %s, retyped %d %s", samePath.Code, samePath.Body.String(), moved.Code, moved.Body.String())
+	}
+}
+
+// A file's own webhook replaces the shared one entirely: its receiver must never get the shared secret or header.
+func TestOwnWebhookNeverSendsSharedSecrets(tester *testing.T) {
+	handler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
+	sharedReceiver, _ := fakeReceiver(tester, http.StatusOK)
+	ownReceiver, ownDeliveries := fakeReceiver(tester, http.StatusOK)
+	envFolderWith(tester, handler, sessionCookie)
+	sendJSON(handler, http.MethodPut, "/api/settings/webhook", editorBody(map[string]any{
+		"url": sharedReceiver.URL, "secret": "shared-secret", "headerName": "Authorization", "headerValue": "Bearer shared",
+	}), sessionCookie)
+	sendJSON(handler, http.MethodPut, "/api/env-files/api.env/apply-target", webhookTargetBody("", map[string]any{"url": ownReceiver.URL}), sessionCookie)
+
+	version := openForEdit(tester, handler, sessionCookie)
+	sendJSON(handler, http.MethodPost, "/api/env-files/api.env/apply", editorBody(map[string]any{"version": version}), sessionCookie)
+	if len(*ownDeliveries) != 1 {
+		tester.Fatalf("own deliveries: %d", len(*ownDeliveries))
+	}
+	if delivery := (*ownDeliveries)[0]; delivery.signature != "" || delivery.authorization != "" {
+		tester.Fatalf("shared secrets sent to the own webhook: %+v", delivery)
+	}
+}

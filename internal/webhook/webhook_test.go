@@ -111,3 +111,23 @@ func TestSendConnectionErrors(tester *testing.T) {
 		tester.Error("unreachable receiver must fail")
 	}
 }
+
+// A redirect would carry the secret header to whatever host the answer names, and turn the POST into
+// a GET whose 200 looks like success. So Docu-UI stops at the 3xx and tells the user where it points.
+func TestSendDoesNotFollowRedirects(tester *testing.T) {
+	otherHost, otherHostReceived := fakeReceiver(tester, http.StatusOK, "")
+	redirecting := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		http.Redirect(writer, request, otherHost.URL+"/steal", http.StatusFound)
+	}))
+	tester.Cleanup(redirecting.Close)
+
+	endpoint := Endpoint{URL: redirecting.URL, Secret: "secret", HeaderName: "X-Token", HeaderValue: "token"}
+	err := Send(context.Background(), endpoint, testDelivery)
+	want := "webhook answered 302, redirecting to " + otherHost.URL + "/steal: use that URL"
+	if err == nil || err.Error() != want {
+		tester.Fatalf("got %v, want %q", err, want)
+	}
+	if otherHostReceived.header != nil {
+		tester.Fatalf("the other host got a request with headers %v", otherHostReceived.header)
+	}
+}

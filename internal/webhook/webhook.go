@@ -23,7 +23,12 @@ const (
 )
 
 // Receivers usually queue a job and answer at once; a slow one should not hang the page.
-var httpClient = &http.Client{Timeout: 30 * time.Second}
+// Redirects are not followed: the user's header would go to whatever host the answer names,
+// and the POST would turn into a GET whose 200 looks like success.
+var httpClient = &http.Client{
+	Timeout:       30 * time.Second,
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
 
 // Endpoint is where and how to send.
 type Endpoint struct {
@@ -73,6 +78,9 @@ func Send(ctx context.Context, endpoint Endpoint, delivery Delivery) error {
 	defer response.Body.Close()
 	if response.StatusCode/100 == 2 {
 		return nil
+	}
+	if location := response.Header.Get("Location"); location != "" {
+		return fmt.Errorf("webhook answered %d, redirecting to %s: use that URL", response.StatusCode, location)
 	}
 	answer, _ := io.ReadAll(io.LimitReader(response.Body, 300))
 	return fmt.Errorf("webhook answered %d: %s", response.StatusCode, strings.TrimSpace(string(answer)))

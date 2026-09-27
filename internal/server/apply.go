@@ -56,8 +56,13 @@ func (handlers envFileHandlers) setDocoCD(writer http.ResponseWriter, request *h
 		writeError(writer, http.StatusInternalServerError, cannotSettings)
 		return
 	}
-	// The page never shows the saved key, so an empty field means "keep it".
-	if settingsInput.APIKey == "" {
+	// The page never shows the saved key, so an empty field means "keep it", but only for the
+	// same host: otherwise whoever edits the URL could send the key to their own server.
+	if settingsInput.APIKey == "" && saved.APIKey != "" {
+		if !sameOrigin(saved.URL, settingsInput.URL) {
+			writeError(writer, http.StatusBadRequest, "the URL points to another host: enter the API secret again")
+			return
+		}
 		settingsInput.APIKey = saved.APIKey
 	}
 	if err := handlers.store.SetDocoCD(request.Context(), store.DocoCD{URL: settingsInput.URL, APIKey: settingsInput.APIKey}); err != nil {
