@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/m0od/docu-ui/internal/auth"
@@ -50,6 +51,7 @@ func main() {
 		SetupToken: setupToken,
 		// Only for plain-HTTP setups on a trusted network; browsers drop Secure cookies over http.
 		InsecureCookie: os.Getenv("DOCU_INSECURE_COOKIE") == "true",
+		AllowedHosts:   strings.Split(os.Getenv("DOCU_ALLOWED_HOSTS"), ","),
 	}, web.Dist())
 	if err != nil {
 		fatal("init server", err)

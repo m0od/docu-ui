@@ -89,6 +89,8 @@ func setClock(tester *testing.T, fixedTime time.Time) {
 func sendJSON(handler http.Handler, method, target, requestBody string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(method, target, strings.NewReader(requestBody))
+	// As a browser on the same machine sends it; httptest's example.com is refused while sign-in is off.
+	request.Host = "localhost:8080"
 	request.Header.Set("Content-Type", "application/json")
 	for _, cookie := range cookies {
 		request.AddCookie(cookie)
