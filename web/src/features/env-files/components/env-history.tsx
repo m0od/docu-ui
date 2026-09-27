@@ -101,16 +101,19 @@ function HistoryComparison({
 }: HistoryComparisonProps) {
   const [isRestoreOpen, setIsRestoreOpen] = useState(false)
   const queryClient = useQueryClient()
-  // Never reuse secrets from an earlier visit.
+  // Never reuse secrets from an earlier visit, and read once per opening: each read is
+  // logged as a view, so a refetch on window focus would log views nobody made.
   const oldContent = useQuery({
     queryKey: ['env', 'history', fileName, entryId],
     queryFn: () => readEnvHistory(fileName, entryId),
     gcTime: 0,
+    staleTime: Infinity,
   })
   const current = useQuery({
     queryKey: ['env', 'content', fileName],
     queryFn: () => readEnvContent(fileName),
     gcTime: 0,
+    staleTime: Infinity,
   })
   const restore = useMutation({
     mutationFn: (baseVersion: string) =>

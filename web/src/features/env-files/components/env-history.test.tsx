@@ -1,4 +1,8 @@
 import { withQueryClient } from '@/test-utils/query-client'
+import {
+  returnToTabLater,
+  withProductionQueryClient,
+} from '@/test-utils/window-focus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
@@ -213,5 +217,28 @@ describe('EnvHistory', () => {
     await expect
       .element(screen.getByRole('button', { name: 'Reload file' }))
       .not.toBeInTheDocument()
+  })
+
+  // Reading an old version and the current file each writes an audit line; coming back to the
+  // tab must not add views nobody made.
+  it('does not read the versions again when the tab regains focus', async () => {
+    vi.mocked(listEnvHistory).mockResolvedValue([newerEntry, olderEntry])
+    vi.mocked(readEnvHistory).mockResolvedValue('A=1\n')
+    vi.mocked(readEnvContent).mockResolvedValue({
+      content: 'A=2\n',
+      version: 'version-2',
+    })
+    const screen = await render(
+      withProductionQueryClient()(
+        <EnvHistory fileName='api.env' onClose={onClose} />
+      )
+    )
+    await userEvent.click(screen.getByRole('button', { name: /ops\.user/ }))
+    await expect.element(screen.getByText('+ A=1')).toBeInTheDocument()
+
+    await returnToTabLater()
+
+    expect(readEnvHistory).toHaveBeenCalledOnce()
+    expect(readEnvContent).toHaveBeenCalledOnce()
   })
 })

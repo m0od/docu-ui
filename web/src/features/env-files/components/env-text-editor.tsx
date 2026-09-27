@@ -21,6 +21,9 @@ export function EnvTextEditor({ fileName, onClose }: EnvTextEditorProps) {
     queryFn: () => readEnvContent(fileName),
     // Never reuse secrets from an earlier visit; always read the file as it is now.
     gcTime: 0,
+    // Read once per opening: each read is logged as a view, and a newer version would
+    // replace the draft. A conflict on save offers the reload instead.
+    staleTime: Infinity,
   })
 
   if (fileContent.isPending) {
