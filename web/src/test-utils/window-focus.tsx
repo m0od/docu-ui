@@ -1,18 +1,13 @@
 import {
   QueryClientProvider,
+  QueryObserver,
   focusManager,
-  useQuery,
 } from '@tanstack/react-query'
 import { expect, vi } from 'vitest'
 import { createQueryClient } from '@/lib/query-client'
 
 // An ordinary query next to the one under test: when it is fetched again, a focus refetch has run.
 const probeQueryFn = vi.fn(() => Promise.resolve('probe'))
-
-function ProbeQuery() {
-  useQuery({ queryKey: ['probe'], queryFn: probeQueryFn })
-  return null
-}
 
 // withProductionQueryClient renders children with the app's own cache settings as built for
 // production, where the window regaining focus refetches stale queries.
@@ -21,11 +16,13 @@ export function withProductionQueryClient() {
   const queryClient = createQueryClient(() => {
     throw new Error('no router in this test')
   })
+  // Subscribed like a mounted useQuery, so the window regaining focus refetches it.
+  new QueryObserver(queryClient, {
+    queryKey: ['probe'],
+    queryFn: probeQueryFn,
+  }).subscribe(() => {})
   return (children: React.ReactNode) => (
-    <QueryClientProvider client={queryClient}>
-      <ProbeQuery />
-      {children}
-    </QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
 }
 
