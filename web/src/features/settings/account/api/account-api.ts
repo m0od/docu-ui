@@ -2,9 +2,15 @@
 import { postJson, requestJson, sendJson } from '@/lib/api-client'
 
 // Without sign-in there is no account, so nothing but the flag.
+// recoveryCodesLeft is only sent while TOTP is on.
 type Account =
   | { signIn: false }
-  | { signIn: true; username: string; totpEnabled: boolean }
+  | {
+      signIn: true
+      username: string
+      totpEnabled: boolean
+      recoveryCodesLeft?: number
+    }
 
 export function fetchAccount(): Promise<Account> {
   return requestJson<Account>('api/account')
@@ -27,12 +33,29 @@ export async function fetchAccountTotpSecret(): Promise<string> {
   return response.secret
 }
 
+// enableTotp returns the new recovery codes; the server shows them only this once.
 export async function enableTotp(input: {
   currentPassword: string
   secret: string
   code: string
-}): Promise<void> {
-  await postJson('api/account/totp', input)
+}): Promise<string[]> {
+  const response = await postJson<{ recoveryCodes: string[] }>(
+    'api/account/totp',
+    input
+  )
+  return response.recoveryCodes
+}
+
+// regenerateRecoveryCodes replaces the recovery codes; the old ones stop working at once.
+export async function regenerateRecoveryCodes(input: {
+  currentPassword: string
+  code: string
+}): Promise<string[]> {
+  const response = await postJson<{ recoveryCodes: string[] }>(
+    'api/account/recovery-codes',
+    input
+  )
+  return response.recoveryCodes
 }
 
 export async function disableTotp(input: {

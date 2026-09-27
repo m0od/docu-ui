@@ -22,10 +22,15 @@ export async function fetchTotpSecret(): Promise<string> {
   return response.secret
 }
 
+// createFirstAccount returns the recovery codes when TOTP is on, else an empty list.
 export async function createFirstAccount(
   input: CreateFirstAccountInput
-): Promise<void> {
-  await postJson('api/setup', input)
+): Promise<string[]> {
+  const response = await postJson<{ recoveryCodes?: string[] }>(
+    'api/setup',
+    input
+  )
+  return response.recoveryCodes ?? []
 }
 
 // skipSignIn finishes setup without an account: Docu-UI then opens without sign-in.

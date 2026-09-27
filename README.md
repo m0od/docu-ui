@@ -40,6 +40,10 @@ The setup page closes for good once the first account exists; a new token is pri
 Later, **Settings → Account** changes the password (other sessions are signed out) and turns TOTP on or off.
 Both need the current password; turning TOTP off also needs a code.
 
+Turning TOTP on (on the setup page or later) gives 10 one-time **recovery codes**. Keep them somewhere other than the phone:
+if the phone is lost, a recovery code works once wherever a TOTP code is asked. Only their hashes are stored.
+**Settings → Account** shows how many are left and creates a new set (password and a code needed); the old set stops working at once.
+
 ### Without sign-in
 
 On a personal machine, tick **Don't set up sign-in** on the setup page (the setup token is still needed).

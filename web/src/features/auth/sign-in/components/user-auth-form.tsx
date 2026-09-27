@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate } from '@tanstack/react-router'
 import { Loader2, LogIn } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { isCompleteCode } from '@/lib/second-factor-code'
 import { signIn } from '@/lib/session-api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -17,13 +18,8 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSeparator,
-  InputOTPSlot,
-} from '@/components/ui/input-otp'
 import { PasswordInput } from '@/components/password-input'
+import { TotpCodeInput } from '@/components/totp-code-input'
 
 const formSchema = z.object({
   username: z.string().trim().min(1, 'Please enter your username.'),
@@ -63,8 +59,10 @@ export function UserAuthForm({
   })
 
   async function onSubmit(values: SignInValues) {
-    if (totpRequired && values.totpCode.length !== 6) {
-      form.setError('totpCode', { message: 'Enter the 6-digit code.' })
+    if (totpRequired && !isCompleteCode(values.totpCode)) {
+      form.setError('totpCode', {
+        message: 'Enter the 6-digit code or a recovery code.',
+      })
       return
     }
     setIsLoading(true)
@@ -138,24 +136,12 @@ export function UserAuthForm({
               <FormItem>
                 <FormLabel>Code from your authenticator app</FormLabel>
                 <FormControl>
-                  <InputOTP
-                    maxLength={6}
+                  <TotpCodeInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    acceptsRecoveryCode
                     autoFocus
-                    {...field}
-                    containerClassName='justify-center'
-                  >
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                    </InputOTPGroup>
-                    <InputOTPSeparator />
-                    <InputOTPGroup>
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
-                    </InputOTPGroup>
-                  </InputOTP>
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

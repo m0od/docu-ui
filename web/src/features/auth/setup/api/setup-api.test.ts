@@ -26,13 +26,16 @@ describe('setup-api', () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
       .mockImplementation(async () => Response.json({}, { status: 201 }))
-    await createFirstAccount({
-      setupToken: 't',
-      username: 'admin',
-      password: 'a-long-password',
-      totpSecret: '',
-      totpCode: '',
-    })
+    // Without TOTP there are no recovery codes.
+    await expect(
+      createFirstAccount({
+        setupToken: 't',
+        username: 'admin',
+        password: 'a-long-password',
+        totpSecret: '',
+        totpCode: '',
+      })
+    ).resolves.toEqual([])
     await skipSignIn('t')
 
     expect(fetchSpy.mock.calls.map(([url, init]) => [url, init?.body])).toEqual(
@@ -44,6 +47,24 @@ describe('setup-api', () => {
         ['api/setup', '{"setupToken":"t","skipSignIn":true}'],
       ]
     )
+  })
+
+  it('returns the recovery codes when the account has TOTP', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      Response.json(
+        { username: 'admin', recoveryCodes: ['abcde-fghij'] },
+        { status: 201 }
+      )
+    )
+    await expect(
+      createFirstAccount({
+        setupToken: 't',
+        username: 'admin',
+        password: 'a-long-password',
+        totpSecret: 'S',
+        totpCode: '123456',
+      })
+    ).resolves.toEqual(['abcde-fghij'])
   })
 
   it('builds the otpauth link, falling back to admin for an empty username', () => {

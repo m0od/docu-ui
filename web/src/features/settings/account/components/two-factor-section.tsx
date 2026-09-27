@@ -2,17 +2,19 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, ShieldCheck, ShieldOff } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
+import { isCompleteCode } from '@/lib/second-factor-code'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/password-input'
+import { RecoveryCodesPanel } from '@/components/recovery-codes-panel'
+import { TotpCodeInput } from '@/components/totp-code-input'
 import { otpauthUri } from '@/features/auth/setup/api/setup-api'
 import {
   disableTotp,
   enableTotp,
   fetchAccountTotpSecret,
 } from '../api/account-api'
-import { TotpCodeInput } from './totp-code-input'
 
 type TwoFactorSectionProps = {
   username: string
@@ -27,14 +29,21 @@ export function TwoFactorSection({
 }: TwoFactorSectionProps) {
   const [currentPassword, setCurrentPassword] = useState('')
   const [code, setCode] = useState('')
+  // Set right after turning TOTP on, until the admin confirms they saved them.
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
   const queryClient = useQueryClient()
   const newSecret = useMutation({ mutationFn: fetchAccountTotpSecret })
   const change = useMutation({
-    mutationFn: () =>
-      totpEnabled
-        ? disableTotp({ currentPassword, code })
-        : enableTotp({ currentPassword, secret: newSecret.data ?? '', code }),
-    onSuccess: () => {
+    // Only turning on gives recovery codes.
+    mutationFn: async (): Promise<string[]> => {
+      if (totpEnabled) {
+        await disableTotp({ currentPassword, code })
+        return []
+      }
+      return enableTotp({ currentPassword, secret: newSecret.data ?? '', code })
+    },
+    onSuccess: (newRecoveryCodes) => {
+      setRecoveryCodes(newRecoveryCodes)
       setCurrentPassword('')
       setCode('')
       newSecret.reset()
@@ -78,7 +87,14 @@ export function TwoFactorSection({
         </p>
       )}
 
-      {showsForm && (
+      {recoveryCodes.length > 0 && (
+        <RecoveryCodesPanel
+          recoveryCodes={recoveryCodes}
+          onDone={() => setRecoveryCodes([])}
+        />
+      )}
+
+      {showsForm && recoveryCodes.length === 0 && (
         <form
           className='grid gap-2'
           onSubmit={(event) => {
@@ -112,13 +128,20 @@ export function TwoFactorSection({
             onChange={(event) => setCurrentPassword(event.target.value)}
           />
           <Label htmlFor='totp-code'>Code from the app</Label>
-          <TotpCodeInput id='totp-code' value={code} onChange={setCode} />
+          <TotpCodeInput
+            id='totp-code'
+            value={code}
+            onChange={setCode}
+            acceptsRecoveryCode={totpEnabled}
+          />
           <div className='flex gap-2'>
             <Button
               type='submit'
               variant={totpEnabled ? 'destructive' : 'default'}
               disabled={
-                change.isPending || currentPassword === '' || code.length !== 6
+                change.isPending ||
+                currentPassword === '' ||
+                !isCompleteCode(code)
               }
             >
               {change.isPending ? (

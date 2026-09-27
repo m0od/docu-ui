@@ -1,3 +1,4 @@
+import { toast } from 'sonner'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, type RenderResult } from 'vitest-browser-react'
 import { userEvent } from 'vitest/browser'
@@ -50,6 +51,8 @@ describe('SetupForm', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    // Without TOTP the account comes with no recovery codes.
+    vi.mocked(createFirstAccount).mockResolvedValue([])
     screen = await render(<SetupForm />)
   })
 
@@ -117,6 +120,7 @@ describe('SetupForm', () => {
       .toBeVisible()
     expect(createFirstAccount).not.toHaveBeenCalled()
 
+    vi.mocked(createFirstAccount).mockResolvedValueOnce(['abcde-fghij'])
     await userEvent.fill(screen.getByLabelText('Code from the app'), '123456')
     await userEvent.click(
       screen.getByRole('button', { name: /Create admin account/ })
@@ -126,6 +130,17 @@ describe('SetupForm', () => {
         expect.objectContaining({ totpSecret: TOTP_SECRET, totpCode: '123456' })
       )
     )
+
+    // The recovery codes are shown before sign-in, and only once, so the page waits for the admin.
+    await expect
+      .element(screen.getByRole('region', { name: 'Recovery codes' }))
+      .toHaveTextContent('abcde-fghij')
+    expect(navigate).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'I saved them' }))
+    expect(toast.success).toHaveBeenCalledWith(
+      'Account tungpt created. Sign in to continue.'
+    )
+    expect(navigate).toHaveBeenCalledWith({ to: '/sign-in', replace: true })
   })
 
   // Turning TOTP off and on again must keep the QR code already scanned.

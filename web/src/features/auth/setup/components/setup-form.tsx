@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/input-otp'
 import { Switch } from '@/components/ui/switch'
 import { PasswordInput } from '@/components/password-input'
+import { RecoveryCodesPanel } from '@/components/recovery-codes-panel'
 import {
   createFirstAccount,
   fetchTotpSecret,
@@ -110,6 +111,8 @@ export function SetupForm({
   const navigate = useNavigate()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [totpSecret, setTotpSecret] = useState('')
+  // With TOTP, the new account's recovery codes are shown before going on to sign-in.
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
 
   const form = useForm<SetupFormValues>({
     resolver: zodResolver(formSchema),
@@ -143,6 +146,13 @@ export function SetupForm({
     }
   }
 
+  function goToSignIn() {
+    toast.success(
+      `Account ${form.getValues('username')} created. Sign in to continue.`
+    )
+    navigate({ to: '/sign-in', replace: true })
+  }
+
   async function onSubmit(values: SetupFormValues) {
     setIsSubmitting(true)
     try {
@@ -152,20 +162,29 @@ export function SetupForm({
         navigate({ to: '/', replace: true })
         return
       }
-      await createFirstAccount({
+      const newRecoveryCodes = await createFirstAccount({
         setupToken: values.setupToken.trim(),
         username: values.username,
         password: values.password,
         totpSecret: values.enableTotp ? totpSecret : '',
         totpCode: values.enableTotp ? values.totpCode : '',
       })
-      toast.success(`Account ${values.username} created. Sign in to continue.`)
-      navigate({ to: '/sign-in', replace: true })
+      if (newRecoveryCodes.length > 0) {
+        setRecoveryCodes(newRecoveryCodes)
+        return
+      }
+      goToSignIn()
     } catch (error) {
       form.setError('root', { message: (error as Error).message })
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  if (recoveryCodes.length > 0) {
+    return (
+      <RecoveryCodesPanel recoveryCodes={recoveryCodes} onDone={goToSignIn} />
+    )
   }
 
   return (

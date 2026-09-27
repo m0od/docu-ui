@@ -42,7 +42,7 @@ describe('TwoFactorSection', () => {
   // The secret is only saved once a code from it works, so a QR never scanned cannot lock the admin out.
   it('turns TOTP on with a code from the new secret', async () => {
     vi.mocked(fetchAccountTotpSecret).mockResolvedValueOnce(TOTP_SECRET)
-    vi.mocked(enableTotp).mockResolvedValueOnce()
+    vi.mocked(enableTotp).mockResolvedValueOnce(['abcde-fghij', 'klmno-pqrst'])
     const { screen: rendering, invalidateSpy } = renderSection(false)
     const screen = await rendering
     await expect.element(screen.getByText('Off')).toBeInTheDocument()
@@ -65,6 +65,13 @@ describe('TwoFactorSection', () => {
       code: '123456',
     })
     await expect.element(screen.getByText(TOTP_SECRET)).not.toBeInTheDocument()
+
+    // The codes are shown once, and stay until the admin says they are saved.
+    const recoveryPanel = screen.getByRole('region', { name: 'Recovery codes' })
+    await expect.element(recoveryPanel).toHaveTextContent('abcde-fghij')
+    await expect.element(recoveryPanel).toHaveTextContent('klmno-pqrst')
+    await userEvent.click(screen.getByRole('button', { name: 'I saved them' }))
+    await expect.element(recoveryPanel).not.toBeInTheDocument()
   })
 
   it('cancels the setup without saving', async () => {
@@ -121,6 +128,41 @@ describe('TwoFactorSection', () => {
       currentPassword: 'pw',
       code: '123456',
     })
+  })
+
+  // With the phone lost, turning TOTP off is the way back to a normal sign-in.
+  it('turns TOTP off with a recovery code', async () => {
+    vi.mocked(disableTotp).mockResolvedValueOnce()
+    const screen = await renderSection(true).screen
+    await userEvent.fill(screen.getByLabelText('Current password'), 'pw')
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: 'Lost your phone? Use a recovery code',
+      })
+    )
+    await userEvent.fill(
+      screen.getByLabelText('Code from the app'),
+      'ABCDE-FGHIJ'
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Turn off' }))
+
+    await vi.waitFor(() =>
+      expect(disableTotp).toHaveBeenCalledWith({
+        currentPassword: 'pw',
+        code: 'ABCDE-FGHIJ',
+      })
+    )
+  })
+
+  // A new secret has no recovery codes yet: only a code from the app can prove the setup.
+  it('does not offer a recovery code when turning TOTP on', async () => {
+    vi.mocked(fetchAccountTotpSecret).mockResolvedValueOnce(TOTP_SECRET)
+    const screen = await renderSection(false).screen
+    await userEvent.click(screen.getByRole('button', { name: 'Set up' }))
+    await expect.element(screen.getByText(TOTP_SECRET)).toBeVisible()
+    await expect
+      .element(screen.getByRole('button', { name: /recovery code/ }))
+      .not.toBeInTheDocument()
   })
 
   it('shows why the server refused and blocks double submits', async () => {

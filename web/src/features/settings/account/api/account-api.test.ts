@@ -5,6 +5,7 @@ import {
   enableTotp,
   fetchAccount,
   fetchAccountTotpSecret,
+  regenerateRecoveryCodes,
   turnOffSignIn,
   turnOnSignIn,
 } from './account-api'
@@ -69,5 +70,24 @@ describe('account-api', () => {
         '{"currentPassword":"pw","code":""}',
       ],
     ])
+  })
+
+  // The codes exist in plain text only in this answer, so the UI must get them to show once.
+  it('returns the recovery codes from turning TOTP on and from creating new ones', async () => {
+    const fetchSpy = mockFetch({ recoveryCodes: ['abcde-fghij'] })
+    await expect(
+      enableTotp({ currentPassword: 'pw', secret: 'S', code: '123456' })
+    ).resolves.toEqual(['abcde-fghij'])
+    mockFetch({ recoveryCodes: ['klmno-pqrst'] })
+    await expect(
+      regenerateRecoveryCodes({ currentPassword: 'pw', code: 'abcde-fghij' })
+    ).resolves.toEqual(['klmno-pqrst'])
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      'api/account/recovery-codes',
+      expect.objectContaining({
+        method: 'POST',
+        body: '{"currentPassword":"pw","code":"abcde-fghij"}',
+      })
+    )
   })
 })

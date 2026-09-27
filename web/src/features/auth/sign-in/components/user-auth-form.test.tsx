@@ -178,7 +178,7 @@ describe('UserAuthForm', () => {
       await userEvent.click(signInButton)
 
       await expect
-        .element(screen.getByText('Enter the 6-digit code.'))
+        .element(screen.getByText('Enter the 6-digit code or a recovery code.'))
         .toBeInTheDocument()
       expect(signIn).toHaveBeenCalledOnce()
     })
@@ -202,6 +202,30 @@ describe('UserAuthForm', () => {
       })
     })
 
+    // The phone may be lost: a recovery code gets the admin in instead of the app code.
+    it('signs in with a recovery code', async () => {
+      vi.mocked(signIn).mockResolvedValueOnce({
+        status: 'signed-in',
+        username: 'admin',
+      })
+
+      await userEvent.click(
+        screen.getByRole('button', {
+          name: 'Lost your phone? Use a recovery code',
+        })
+      )
+      await userEvent.keyboard('abcde-fghij')
+      await userEvent.click(signInButton)
+
+      await vi.waitFor(() =>
+        expect(signIn).toHaveBeenLastCalledWith({
+          username: 'admin',
+          password: 'correct horse battery',
+          totpCode: 'abcde-fghij',
+        })
+      )
+    })
+
     // Codes are single-use; after a rejection the old digits are useless.
     it('clears a rejected code', async () => {
       vi.mocked(signIn).mockRejectedValueOnce(
@@ -216,7 +240,7 @@ describe('UserAuthForm', () => {
         .toHaveTextContent('already used')
       await userEvent.click(signInButton)
       await expect
-        .element(screen.getByText('Enter the 6-digit code.'))
+        .element(screen.getByText('Enter the 6-digit code or a recovery code.'))
         .toBeInTheDocument()
     })
   })

@@ -14,6 +14,11 @@ vi.mock('./components/turn-off-sign-in-section', () => ({
     <p>{`turn off ${props.totpEnabled}`}</p>
   ),
 }))
+vi.mock('./components/recovery-codes-section', () => ({
+  RecoveryCodesSection: (props: { recoveryCodesLeft: number }) => (
+    <p>{`recovery codes ${props.recoveryCodesLeft}`}</p>
+  ),
+}))
 vi.mock('./components/two-factor-section', () => ({
   TwoFactorSection: (props: { username: string; totpEnabled: boolean }) => (
     <p>{`two-factor ${props.username} ${props.totpEnabled}`}</p>
@@ -40,7 +45,12 @@ describe('SettingsAccount', () => {
 
   it('shows the password form, the TOTP state and turning sign-in off', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      Response.json({ signIn: true, username: 'admin', totpEnabled: true })
+      Response.json({
+        signIn: true,
+        username: 'admin',
+        totpEnabled: true,
+        recoveryCodesLeft: 7,
+      })
     )
     const screen = await render(withQueryClient(<SettingsAccount />))
 
@@ -48,9 +58,27 @@ describe('SettingsAccount', () => {
     await expect
       .element(screen.getByText('two-factor admin true'))
       .toBeInTheDocument()
+    await expect
+      .element(screen.getByText('recovery codes 7'))
+      .toBeInTheDocument()
     await expect.element(screen.getByText('turn off true')).toBeInTheDocument()
     await expect
       .element(screen.getByText('turn on form'))
+      .not.toBeInTheDocument()
+  })
+
+  // Without TOTP there is nothing for recovery codes to stand in for.
+  it('hides recovery codes while TOTP is off', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      Response.json({ signIn: true, username: 'admin', totpEnabled: false })
+    )
+    const screen = await render(withQueryClient(<SettingsAccount />))
+
+    await expect
+      .element(screen.getByText('two-factor admin false'))
+      .toBeInTheDocument()
+    await expect
+      .element(screen.getByText(/recovery codes/))
       .not.toBeInTheDocument()
   })
 

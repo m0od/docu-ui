@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ContentSection } from '../components/content-section'
 import { fetchAccount } from './api/account-api'
 import { PasswordForm } from './components/password-form'
+import { RecoveryCodesSection } from './components/recovery-codes-section'
 import { TurnOffSignInSection } from './components/turn-off-sign-in-section'
 import { TurnOnSignInForm } from './components/turn-on-sign-in-form'
 import { TwoFactorSection } from './components/two-factor-section'
@@ -32,6 +33,14 @@ export function SettingsAccount() {
               username={account.data.username}
               totpEnabled={account.data.totpEnabled}
             />
+            {account.data.recoveryCodesLeft !== undefined && (
+              <>
+                <Separator />
+                <RecoveryCodesSection
+                  recoveryCodesLeft={account.data.recoveryCodesLeft}
+                />
+              </>
+            )}
             <Separator />
             <TurnOffSignInSection totpEnabled={account.data.totpEnabled} />
           </div>

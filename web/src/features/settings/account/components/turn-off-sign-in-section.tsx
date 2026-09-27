@@ -3,11 +3,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Loader2, ShieldOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { isCompleteCode } from '@/lib/second-factor-code'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { PasswordInput } from '@/components/password-input'
+import { TotpCodeInput } from '@/components/totp-code-input'
 import { turnOffSignIn } from '../api/account-api'
-import { TotpCodeInput } from './totp-code-input'
 
 type TurnOffSignInSectionProps = {
   totpEnabled: boolean
@@ -55,7 +56,12 @@ export function TurnOffSignInSection({
       {totpEnabled && (
         <>
           <Label htmlFor='turn-off-code'>Code from the app</Label>
-          <TotpCodeInput id='turn-off-code' value={code} onChange={setCode} />
+          <TotpCodeInput
+            id='turn-off-code'
+            value={code}
+            onChange={setCode}
+            acceptsRecoveryCode
+          />
         </>
       )}
       <Button
@@ -65,7 +71,7 @@ export function TurnOffSignInSection({
         disabled={
           turnOff.isPending ||
           currentPassword === '' ||
-          (totpEnabled && code.length !== 6)
+          (totpEnabled && !isCompleteCode(code))
         }
       >
         {turnOff.isPending ? (
