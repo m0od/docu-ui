@@ -62,10 +62,7 @@ describe('ApplyPanel', () => {
       .element(screen.getByRole('button', { name: 'Cancel' }))
       .not.toBeInTheDocument()
 
-    await userEvent.fill(
-      screen.getByLabelText('Compose project'),
-      ' shop-dev '
-    )
+    await userEvent.fill(screen.getByLabelText('Compose project'), ' shop-dev ')
     await userEvent.fill(screen.getByLabelText('Services'), 'api, worker ')
     await userEvent.click(saveButton)
 
@@ -300,9 +297,7 @@ describe('ApplyPanel', () => {
     await expect
       .element(screen.getByText('via own webhook'))
       .toBeInTheDocument()
-    await expect
-      .element(screen.getByText('shop-dev: api'))
-      .toBeInTheDocument()
+    await expect.element(screen.getByText('shop-dev: api')).toBeInTheDocument()
   })
 
   // Unticking the box drops the file's own webhook, so the shared one is used again.

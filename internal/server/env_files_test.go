@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -193,11 +195,11 @@ func TestEnvFileErrors(tester *testing.T) {
 	folder := envFolderWith(tester, handler, sessionCookie)
 	os.Symlink("/etc/hosts", filepath.Join(folder, "escape.env"))
 	expectedCodes := map[string]int{
-		"/api/env-files/..%2Fsecret.env":                 http.StatusBadRequest,
-		"/api/env-files/missing.env":                     http.StatusNotFound,
-		"/api/env-files/api.env/variables/MISSING":  http.StatusNotFound,
-		"/api/env-files/escape.env":                      http.StatusInternalServerError,
-		"/api/env-files/escape.env/variables/KEY":        http.StatusInternalServerError,
+		"/api/env-files/..%2Fsecret.env":                  http.StatusBadRequest,
+		"/api/env-files/missing.env":                      http.StatusNotFound,
+		"/api/env-files/api.env/variables/MISSING":        http.StatusNotFound,
+		"/api/env-files/escape.env":                       http.StatusInternalServerError,
+		"/api/env-files/escape.env/variables/KEY":         http.StatusInternalServerError,
 		"/api/env-files/..%2Fsecret.env/variables/APP_DB": http.StatusBadRequest,
 	}
 	for target, expectedCode := range expectedCodes {
@@ -225,5 +227,51 @@ func TestEnvRoutesReportStoreFailures(tester *testing.T) {
 	response := sendJSON(handler, http.MethodPut, "/api/settings/env-folder", envFolderBody(tester.TempDir()), sessionCookie)
 	if response.Code != http.StatusInternalServerError {
 		tester.Fatalf("got %d", response.Code)
+	}
+}
+
+// README: revealing a value is logged with user, file and key, never the value. Logs go to
+// docker logs, CI and log shippers, where a secret would outlive any change to the file.
+func TestLogsNeverContainValues(tester *testing.T) {
+	var logOutput bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logOutput, nil)))
+	tester.Cleanup(func() { slog.SetDefault(previousLogger) })
+
+	handler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
+	folder := envFolderWith(tester, handler, sessionCookie)
+	envFile := filepath.Join(folder, "api.env")
+	os.WriteFile(envFile, []byte("APP_DB_PASSWORD=original-value-1\n"), 0o600)
+	secretValues := []string{"original-value-1", "text-value-2", "patch-value-3", "failed-value-4"}
+
+	sendJSON(handler, http.MethodGet, "/api/env-files/api.env/variables/APP_DB_PASSWORD", "", sessionCookie)
+	sendJSON(handler, http.MethodGet, "/api/env-files/api.env/content", "", sessionCookie)
+	textSaved := sendJSON(handler, http.MethodPut, "/api/env-files/api.env/content", editorBody(map[string]any{
+		"baseVersion": openForEdit(tester, handler, sessionCookie), "content": "APP_DB_PASSWORD=text-value-2\n"}), sessionCookie)
+	patched := sendJSON(handler, http.MethodPatch, "/api/env-files/api.env/variables", editorBody(map[string]any{
+		"baseVersion": responseField(tester, textSaved, "version"),
+		"changes":     []map[string]any{{"key": "APP_DB_PASSWORD", "value": "patch-value-3"}}}), sessionCookie)
+	entryIDs := historyEntryIDs(tester, handler, sessionCookie)
+	sendJSON(handler, http.MethodGet, "/api/env-files/api.env/history/"+entryIDs[0], "", sessionCookie)
+	restored := sendJSON(handler, http.MethodPost, "/api/env-files/api.env/history/"+entryIDs[0]+"/restore",
+		editorBody(map[string]any{"baseVersion": responseField(tester, patched, "version")}), sessionCookie)
+	os.Chmod(envFile, 0o400)
+	tester.Cleanup(func() { os.Chmod(envFile, 0o600) })
+	failed := sendJSON(handler, http.MethodPut, "/api/env-files/api.env/content", editorBody(map[string]any{
+		"baseVersion": responseField(tester, restored, "version"), "content": "APP_DB_PASSWORD=failed-value-4\n"}), sessionCookie)
+	if failed.Code != http.StatusInternalServerError {
+		tester.Fatalf("the failed save must be logged as an error: %d %s", failed.Code, failed.Body.String())
+	}
+
+	logged := logOutput.String()
+	for _, auditLine := range []string{"env value revealed", "key=APP_DB_PASSWORD", "env file saved as text", "env variables changed", "env file restored", "level=ERROR"} {
+		if !strings.Contains(logged, auditLine) {
+			tester.Errorf("the log misses %q:\n%s", auditLine, logged)
+		}
+	}
+	for _, secretValue := range secretValues {
+		if strings.Contains(logged, secretValue) {
+			tester.Errorf("the log contains the value %q:\n%s", secretValue, logged)
+		}
 	}
 }

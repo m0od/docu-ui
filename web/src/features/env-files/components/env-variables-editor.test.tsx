@@ -72,14 +72,10 @@ describe('EnvVariablesEditor', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await vi.waitFor(() =>
-      expect(changeEnvVariables).toHaveBeenCalledWith(
-        'api.env',
-        'version-1',
-        [
-          { key: 'APP_PASSWORD', value: null },
-          { key: 'APP_PORT', value: '8080' },
-        ]
-      )
+      expect(changeEnvVariables).toHaveBeenCalledWith('api.env', 'version-1', [
+        { key: 'APP_PASSWORD', value: null },
+        { key: 'APP_PORT', value: '8080' },
+      ])
     )
     await expect
       .element(screen.getByRole('button', { name: 'Review and save' }))
@@ -90,7 +86,10 @@ describe('EnvVariablesEditor', () => {
     vi.mocked(revealEnvValue).mockResolvedValueOnce('postgres')
     const screen = await renderEditor()
     await userEvent.click(screen.getByRole('button', { name: 'Edit APP_DB' }))
-    await userEvent.fill(screen.getByLabelText('New value of APP_DB'), 'mariadb')
+    await userEvent.fill(
+      screen.getByLabelText('New value of APP_DB'),
+      'mariadb'
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
     await expect
       .element(screen.getByText('1 unsaved change'))

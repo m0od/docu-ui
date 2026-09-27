@@ -49,7 +49,8 @@ func Recreate(ctx context.Context, project string, services []string) error {
 	for _, envFile := range splitList(labels[2]) {
 		arguments = append(arguments, "--env-file", envFile)
 	}
-	arguments = append(arguments, "up", "--detach", "--force-recreate", "--no-deps")
+	// "--" ends the options: a service name can never be read as a flag such as --privileged.
+	arguments = append(arguments, "up", "--detach", "--force-recreate", "--no-deps", "--")
 	_, err = run(ctx, append(arguments, services...)...)
 	return err
 }

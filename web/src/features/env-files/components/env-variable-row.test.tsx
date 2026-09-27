@@ -54,10 +54,7 @@ describe('EnvVariableRow', () => {
       screen.getByRole('button', { name: 'Show APP_DB_PASSWORD' })
     )
     await expect.element(screen.getByText('s3cret')).toBeInTheDocument()
-    expect(revealEnvValue).toHaveBeenCalledWith(
-      'api.env',
-      'APP_DB_PASSWORD'
-    )
+    expect(revealEnvValue).toHaveBeenCalledWith('api.env', 'APP_DB_PASSWORD')
 
     await userEvent.click(
       screen.getByRole('button', { name: 'Hide APP_DB_PASSWORD' })

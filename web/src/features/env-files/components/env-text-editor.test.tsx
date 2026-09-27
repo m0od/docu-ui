@@ -48,11 +48,7 @@ describe('EnvTextEditor', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce())
-    expect(saveEnvContent).toHaveBeenCalledWith(
-      'api.env',
-      'version-1',
-      'A=2\n'
-    )
+    expect(saveEnvContent).toHaveBeenCalledWith('api.env', 'version-1', 'A=2\n')
   })
 
   it('cancels without saving', async () => {
