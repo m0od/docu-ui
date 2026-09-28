@@ -84,6 +84,8 @@ Change variables one by one (other values stay masked), or switch to **Edit as t
 Both show the changes before saving. If someone saved the same file in the meantime, the save is refused and you reload.
 
 Before each save, the previous content is kept in `<folder>/.history/<file>/<time>_<user>.env` (newest 50 per file).
+History entries hold every old value in clear, so Docu-UI creates them readable by its own user only (folders 0700, files 0600).
+It does not change a `.history` that already exists: when restoring one from a backup, keep it at 0700 (`chmod -R go-rwx <folder>/.history`).
 The file is rewritten in place, so its owner and mode stay as they are.
 
 **History** lists the kept versions. Pick one to see what restoring it would change in the current file, then restore it.
