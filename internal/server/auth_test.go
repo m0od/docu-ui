@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/base32"
 	"encoding/json"
 	"errors"
@@ -464,5 +465,32 @@ func TestSessionTimeouts(tester *testing.T) {
 	}
 	if code := meCode(busyCookie, busyStart.Add(sessionMaxLifetime)); code != http.StatusUnauthorized {
 		tester.Fatalf("after 8 hours: got %d", code)
+	}
+}
+
+// The database keeps only a hash of each session cookie, so a leaked database (a backup, a copied
+// volume) gives nothing that signs in.
+func TestSessionsAreStoredHashed(tester *testing.T) {
+	databasePath := filepath.Join(tester.TempDir(), "docu-ui.db")
+	testStore, err := store.Open(databasePath)
+	if err != nil {
+		tester.Fatal(err)
+	}
+	tester.Cleanup(func() { testStore.Close() })
+	testStore.CreateFirstAccount(context.Background(), "admin", auth.HashPassword(adminPassword), "")
+	handler, sessionCookie := signedIn(tester, testStore)
+
+	database, _ := sql.Open("sqlite", "file:"+databasePath)
+	tester.Cleanup(func() { database.Close() })
+	var storedToken string
+	if err := database.QueryRow(`SELECT token_hash FROM sessions`).Scan(&storedToken); err != nil {
+		tester.Fatal(err)
+	}
+	if storedToken == sessionCookie.Value || storedToken != hashSessionToken(sessionCookie.Value) {
+		tester.Fatalf("stored %q for cookie %q", storedToken, sessionCookie.Value)
+	}
+	leakedCookie := &http.Cookie{Name: sessionCookieName, Value: storedToken}
+	if response := sendJSON(handler, http.MethodGet, "/api/auth/me", "", leakedCookie); response.Code != http.StatusUnauthorized {
+		tester.Fatalf("the stored value signs in: %d", response.Code)
 	}
 }

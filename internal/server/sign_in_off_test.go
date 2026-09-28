@@ -339,3 +339,17 @@ func TestSignedInRequestsSkipTheHostCheck(tester *testing.T) {
 		tester.Fatalf("got %d %s", recorder.Code, recorder.Body.String())
 	}
 }
+
+// A cookie from before sign-in was turned off must not come back to life when a new account is
+// made: SQLite can give the new account the old id, so only deleting the sessions protects it.
+func TestOldSessionDiesWithTheAccount(tester *testing.T) {
+	handler, oldCookie := signedIn(tester, openAdminStore(tester, ""))
+	sendJSON(handler, http.MethodPost, "/api/account/sign-in/disable", editorBody(map[string]any{"currentPassword": adminPassword}), oldCookie)
+	turnedOn := sendJSON(handler, http.MethodPost, "/api/account/sign-in", editorBody(map[string]any{"username": "admin", "password": adminPassword}))
+	if turnedOn.Code != http.StatusCreated {
+		tester.Fatalf("turn on: %d %s", turnedOn.Code, turnedOn.Body.String())
+	}
+	if response := sendJSON(handler, http.MethodGet, "/api/auth/me", "", oldCookie); response.Code != http.StatusUnauthorized {
+		tester.Fatalf("old cookie: %d %s", response.Code, response.Body.String())
+	}
+}
