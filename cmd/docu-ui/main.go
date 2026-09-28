@@ -16,12 +16,45 @@ import (
 	"github.com/m0od/docu-ui/web"
 )
 
-func main() {
-	listenAddress := getenv("DOCU_ADDR", ":8080")
-	dataDirectory := getenv("DOCU_DATA_DIR", "/data")
-	tlsCertFile, tlsKeyFile := os.Getenv("DOCU_TLS_CERT"), os.Getenv("DOCU_TLS_KEY")
+// startupConfig is what Docu-UI reads from its environment variables.
+type startupConfig struct {
+	listenAddress, dataDirectory string
+	tlsCertFile, tlsKeyFile      string
+	basePath                     string
+	insecureCookie               bool
+	allowedHosts                 []string
+}
 
-	accountStore, err := store.Open(filepath.Join(dataDirectory, "docu-ui.db"))
+// loadConfig reads the settings through lookupEnv (os.Getenv outside tests).
+func loadConfig(lookupEnv func(key string) string) startupConfig {
+	withDefault := func(key, fallback string) string {
+		if value := lookupEnv(key); value != "" {
+			return value
+		}
+		return fallback
+	}
+	return startupConfig{
+		listenAddress: withDefault("DOCU_ADDR", ":8080"),
+		dataDirectory: withDefault("DOCU_DATA_DIR", "/data"),
+		tlsCertFile:   lookupEnv("DOCU_TLS_CERT"),
+		tlsKeyFile:    lookupEnv("DOCU_TLS_KEY"),
+		basePath:      lookupEnv("DOCU_BASE_PATH"),
+		// Only for plain-HTTP setups on a trusted network; browsers drop Secure cookies over http.
+		insecureCookie: lookupEnv("DOCU_INSECURE_COOKIE") == "true",
+		allowedHosts:   strings.Split(lookupEnv("DOCU_ALLOWED_HOSTS"), ","),
+	}
+}
+
+// servesTLS: with a cert, Docu-UI serves HTTPS itself (standalone). Without one it expects a gateway
+// to terminate TLS. A key alone also picks HTTPS, so the missing cert fails loudly at start.
+func (startup startupConfig) servesTLS() bool {
+	return startup.tlsCertFile != "" || startup.tlsKeyFile != ""
+}
+
+func main() {
+	startup := loadConfig(os.Getenv)
+
+	accountStore, err := store.Open(filepath.Join(startup.dataDirectory, "docu-ui.db"))
 	if err != nil {
 		fatal("open database", err)
 	}
@@ -46,22 +79,20 @@ func main() {
 	}
 
 	handler, err := server.New(server.Config{
-		BasePath:   os.Getenv("DOCU_BASE_PATH"),
-		Store:      accountStore,
-		SetupToken: setupToken,
-		// Only for plain-HTTP setups on a trusted network; browsers drop Secure cookies over http.
-		InsecureCookie: os.Getenv("DOCU_INSECURE_COOKIE") == "true",
-		AllowedHosts:   strings.Split(os.Getenv("DOCU_ALLOWED_HOSTS"), ","),
+		BasePath:       startup.basePath,
+		Store:          accountStore,
+		SetupToken:     setupToken,
+		InsecureCookie: startup.insecureCookie,
+		AllowedHosts:   startup.allowedHosts,
 	}, web.Dist())
 	if err != nil {
 		fatal("init server", err)
 	}
-	httpServer := &http.Server{Addr: listenAddress, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	slog.Info("listening", "addr", listenAddress, "base_path", server.NormalizeBasePath(os.Getenv("DOCU_BASE_PATH")),
-		"tls", tlsCertFile != "")
-	// With a cert, Docu-UI serves HTTPS itself (standalone). Without one it expects a gateway to terminate TLS.
-	if tlsCertFile != "" || tlsKeyFile != "" {
-		err = httpServer.ListenAndServeTLS(tlsCertFile, tlsKeyFile)
+	httpServer := &http.Server{Addr: startup.listenAddress, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	slog.Info("listening", "addr", startup.listenAddress, "base_path", server.NormalizeBasePath(startup.basePath),
+		"tls", startup.tlsCertFile != "")
+	if startup.servesTLS() {
+		err = httpServer.ListenAndServeTLS(startup.tlsCertFile, startup.tlsKeyFile)
 	} else {
 		err = httpServer.ListenAndServe()
 	}
@@ -71,11 +102,4 @@ func main() {
 func fatal(message string, err error) {
 	slog.Error(message, "err", err)
 	os.Exit(1)
-}
-
-func getenv(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
 }
