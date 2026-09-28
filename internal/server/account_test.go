@@ -77,16 +77,28 @@ func TestChangePasswordRejectsBadInput(tester *testing.T) {
 	}
 }
 
-// Guessing the current password from an open session counts towards the sign-in lockout.
+// Guessing the current password from an open session counts towards the sign-in lockout, and while
+// locked even the right password changes nothing: neither the password nor the second factor.
 func TestWrongCurrentPasswordsLockTheAccount(tester *testing.T) {
 	handler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
+	startTime := time.Unix(59, 0) // the code is 287082
+	setClock(tester, startTime)
 	wrongBody := editorBody(map[string]any{"currentPassword": "wrong-password", "newPassword": newPassword})
 	for attempt := 1; attempt <= maxFailedLogins; attempt++ {
 		sendJSON(handler, http.MethodPut, "/api/account/password", wrongBody, sessionCookie)
 	}
-	rightBody := editorBody(map[string]any{"currentPassword": adminPassword, "newPassword": newPassword})
-	if locked := sendJSON(handler, http.MethodPut, "/api/account/password", rightBody, sessionCookie); locked.Code != http.StatusTooManyRequests {
-		tester.Fatalf("got %d %s", locked.Code, locked.Body.String())
+	lockedRequests := []struct{ method, target, body string }{
+		{http.MethodPut, "/api/account/password", editorBody(map[string]any{"currentPassword": adminPassword, "newPassword": newPassword})},
+		{http.MethodPost, "/api/account/totp", editorBody(map[string]any{"currentPassword": adminPassword, "secret": authTestSecret, "code": "287082"})},
+	}
+	for _, lockedRequest := range lockedRequests {
+		if locked := sendJSON(handler, lockedRequest.method, lockedRequest.target, lockedRequest.body, sessionCookie); locked.Code != http.StatusTooManyRequests {
+			tester.Errorf("%s: got %d %s", lockedRequest.target, locked.Code, locked.Body.String())
+		}
+	}
+	setClock(tester, startTime.Add(loginLockoutTime+time.Second))
+	if signInCode(handler, adminPassword, "") != http.StatusOK {
+		tester.Fatal("a locked request changed the password or turned TOTP on")
 	}
 }
 
@@ -216,6 +228,12 @@ func TestWrongConfirmationCodesLockTheAccount(tester *testing.T) {
 		}
 		if signIn := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, "969429")); responseField(tester, signIn, "error") != invalidLogin {
 			tester.Errorf("%s: sign-in not locked: %d %s", route, signIn.Code, signIn.Body.String())
+		}
+		// Nothing was done while locked: TOTP and sign-in are still on, the recovery codes untouched.
+		setClock(tester, time.Unix(119, 0).Add(loginLockoutTime+time.Second))
+		passwordOnly := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, ""))
+		if responseField(tester, passwordOnly, "totpRequired") != true || recoveryCodesLeft(tester, handler, sessionCookie) != float64(0) {
+			tester.Errorf("%s: changed while locked: %s", route, passwordOnly.Body.String())
 		}
 	}
 }
