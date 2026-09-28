@@ -187,6 +187,21 @@ func TestFailedSignInsLockAccount(tester *testing.T) {
 	}
 }
 
+// The lock counts failures in a row: a user who mistypes a few times and then gets it right starts
+// from zero again. Four failures must never lock, even twice in one day.
+func TestSuccessfulSignInResetsTheFailures(tester *testing.T) {
+	handler := newAuthServer(tester, Config{Store: openAdminStore(tester, "")})
+	setClock(tester, time.Unix(1_000_000, 0))
+	for round := 1; round <= 2; round++ {
+		for attempt := 1; attempt < maxFailedLogins; attempt++ {
+			sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", "guess", ""))
+		}
+		if signedIn := sendJSON(handler, http.MethodPost, "/api/auth/login", signInBody("admin", adminPassword, "")); signedIn.Code != http.StatusOK {
+			tester.Fatalf("round %d: %d %s", round, signedIn.Code, signedIn.Body.String())
+		}
+	}
+}
+
 func TestSignInWithTOTP(tester *testing.T) {
 	handler := newAuthServer(tester, Config{Store: openAdminStore(tester, authTestSecret)})
 	setClock(tester, time.Unix(59, 0))
