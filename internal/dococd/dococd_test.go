@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeDocoCD records the last request and answers with statusCode and responseBody.
@@ -94,5 +95,26 @@ func TestRecreateDoesNotFollowRedirects(tester *testing.T) {
 	}
 	if otherHostRequest.Method != "" {
 		tester.Fatalf("the other host got %s %s", otherHostRequest.Method, otherHostRequest.URL)
+	}
+}
+
+// A Doco-CD that never answers must not keep the apply request open: after the timeout Recreate
+// fails, and the file stays "not applied".
+func TestRecreateGivesUpOnAHungDocoCD(tester *testing.T) {
+	if httpClient.Timeout == 0 {
+		tester.Fatal("no timeout: a hung Doco-CD would hang the apply request forever")
+	}
+	release := make(chan struct{})
+	hung := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	tester.Cleanup(hung.Close)
+	// Runs before Close (cleanups run last-in first-out), which waits for the handler to return.
+	tester.Cleanup(func() { close(release) })
+	productionTimeout := httpClient.Timeout
+	httpClient.Timeout = 100 * time.Millisecond
+	tester.Cleanup(func() { httpClient.Timeout = productionTimeout })
+
+	err := Recreate(context.Background(), hung.URL, "key", "shop-dev", "")
+	if err == nil || !strings.Contains(err.Error(), "Client.Timeout exceeded") {
+		tester.Fatalf("got %v", err)
 	}
 }

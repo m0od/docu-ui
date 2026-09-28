@@ -4,8 +4,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // fakeDocker puts a "docker" on PATH that records its arguments, prints listing for "ps" and
@@ -120,5 +123,40 @@ func TestRecreateNeverPassesServicesAsFlags(tester *testing.T) {
 	}
 	if got := calls(tester, callLog)[1]; !strings.HasSuffix(got, " --no-deps -- --privileged") {
 		tester.Fatalf("got %s", got)
+	}
+}
+
+// A hung docker (daemon stuck, image pull that never ends) must not keep the apply request open
+// forever: after the timeout Recreate gives up, and the file stays "not applied".
+// The sleep runs as a child of the script, as the Compose plugin runs as a child of the docker CLI:
+// it must be killed too, or it would recreate the services after the user was told it failed.
+func TestRecreateGivesUpOnAHungDocker(tester *testing.T) {
+	binDirectory := tester.TempDir()
+	childPIDFile := filepath.Join(binDirectory, "child-pid")
+	script := "#!/bin/sh\n/bin/sleep 20 &\necho $! > " + childPIDFile + "\nwait\n"
+	if err := os.WriteFile(filepath.Join(binDirectory, "docker"), []byte(script), 0o755); err != nil {
+		tester.Fatal(err)
+	}
+	tester.Setenv("PATH", binDirectory)
+	productionTimeout := timeout
+	timeout = time.Second
+	tester.Cleanup(func() { timeout = productionTimeout })
+
+	started := time.Now()
+	err := Recreate(context.Background(), "app", nil)
+	if err == nil || time.Since(started) > 10*time.Second {
+		tester.Fatalf("got %v after %v", err, time.Since(started))
+	}
+	childPID, err := os.ReadFile(childPIDFile)
+	if err != nil {
+		tester.Fatal(err)
+	}
+	processID, _ := strconv.Atoi(strings.TrimSpace(string(childPID)))
+	// The killed child is reaped by init, so it can take a moment to disappear.
+	for attempt := 0; syscall.Kill(processID, 0) == nil; attempt++ {
+		if attempt == 50 {
+			tester.Fatalf("child %d still runs after the timeout", processID)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

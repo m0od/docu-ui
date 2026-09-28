@@ -131,3 +131,24 @@ func TestSendDoesNotFollowRedirects(tester *testing.T) {
 		tester.Fatalf("the other host got a request with headers %v", otherHostReceived.header)
 	}
 }
+
+// A receiver that never answers must not keep the apply request open: after the timeout Send
+// fails, and the file stays "not applied".
+func TestSendGivesUpOnAHungReceiver(tester *testing.T) {
+	if httpClient.Timeout == 0 {
+		tester.Fatal("no timeout: a hung receiver would hang the apply request forever")
+	}
+	release := make(chan struct{})
+	hung := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	tester.Cleanup(hung.Close)
+	// Runs before Close (cleanups run last-in first-out), which waits for the handler to return.
+	tester.Cleanup(func() { close(release) })
+	productionTimeout := httpClient.Timeout
+	httpClient.Timeout = 100 * time.Millisecond
+	tester.Cleanup(func() { httpClient.Timeout = productionTimeout })
+
+	err := Send(context.Background(), Endpoint{URL: hung.URL}, testDelivery)
+	if err == nil || !strings.Contains(err.Error(), "Client.Timeout exceeded") {
+		tester.Fatalf("got %v", err)
+	}
+}
