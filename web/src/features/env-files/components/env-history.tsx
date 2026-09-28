@@ -164,7 +164,7 @@ function HistoryComparison({
         desc='The current file is kept in its history, so this can be undone.'
         confirmText='Restore'
         isLoading={restore.isPending}
-        handleConfirm={() => restore.mutate(current.data.version)}
+        handleConfirm={() => restore.mutateAsync(current.data.version)}
       >
         {restore.isError && (
           <div role='alert' className='text-sm font-medium text-destructive'>

@@ -107,7 +107,7 @@ function TextEditorForm({
         confirmText='Save'
         className='sm:max-w-2xl'
         isLoading={saveContent.isPending}
-        handleConfirm={() => saveContent.mutate()}
+        handleConfirm={() => saveContent.mutateAsync()}
       >
         <LineDiff before={original} after={draft} />
         {saveContent.isError && (

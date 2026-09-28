@@ -174,4 +174,23 @@ describe('EnvTextEditor', () => {
 
     await vi.waitFor(() => expect(readEnvContent).toHaveBeenCalledTimes(2))
   })
+
+  // A double click on Save must send one save, not a second one that fails with a conflict.
+  it('saves once on a double click', async () => {
+    vi.mocked(readEnvContent).mockResolvedValueOnce({
+      content: 'A=1\n',
+      version: 'version-1',
+    })
+    vi.mocked(saveEnvContent).mockReturnValue(new Promise(() => {}))
+    const screen = await renderEditor()
+    await userEvent.fill(screen.getByLabelText('Content of api.env'), 'A=2\n')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Review and save' })
+    )
+
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Save' }))
+
+    await vi.waitFor(() => expect(saveEnvContent).toHaveBeenCalled())
+    expect(saveEnvContent).toHaveBeenCalledOnce()
+  })
 })

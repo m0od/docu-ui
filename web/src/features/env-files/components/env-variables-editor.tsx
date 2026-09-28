@@ -156,7 +156,7 @@ export function EnvVariablesEditor({
         confirmText='Save'
         isLoading={saveChanges.isPending}
         handleConfirm={() =>
-          saveChanges.mutate(
+          saveChanges.mutateAsync(
             [...pendingChanges].map(([key, value]) => ({ key, value }))
           )
         }

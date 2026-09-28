@@ -241,4 +241,19 @@ describe('EnvHistory', () => {
     expect(readEnvHistory).toHaveBeenCalledOnce()
     expect(readEnvContent).toHaveBeenCalledOnce()
   })
+
+  // A double click on Restore must restore once: the second would put the replaced content
+  // in the history a second time, or fail with a conflict.
+  it('restores once on a double click', async () => {
+    vi.mocked(restoreEnvHistory).mockReturnValue(new Promise(() => {}))
+    const screen = await openNewerEntry('A=1\n')
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Restore this version' })
+    )
+
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Restore' }))
+
+    await vi.waitFor(() => expect(restoreEnvHistory).toHaveBeenCalled())
+    expect(restoreEnvHistory).toHaveBeenCalledOnce()
+  })
 })

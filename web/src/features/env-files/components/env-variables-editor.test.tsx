@@ -196,4 +196,20 @@ describe('EnvVariablesEditor', () => {
       .element(screen.getByRole('button', { name: 'Reload file' }))
       .not.toBeInTheDocument()
   })
+
+  // A double click on Save must send one save: a second one would fail with a conflict
+  // right after the first succeeded, and show a confusing error.
+  it('saves once on a double click', async () => {
+    vi.mocked(changeEnvVariables).mockReturnValue(new Promise(() => {}))
+    const screen = await renderEditor()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove APP_DB' }))
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Review and save' })
+    )
+
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Save' }))
+
+    await vi.waitFor(() => expect(changeEnvVariables).toHaveBeenCalled())
+    expect(changeEnvVariables).toHaveBeenCalledOnce()
+  })
 })
