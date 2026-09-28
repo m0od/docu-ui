@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -49,6 +50,34 @@ func envFolderWith(tester *testing.T, handler http.Handler, sessionCookie *http.
 		tester.Fatalf("save folder: %d %s", saved.Code, saved.Body.String())
 	}
 	return folder
+}
+
+// Only names like api.env in the folder itself can be written: a path, a hidden file or another
+// extension must be refused by every write route before anything touches the disk.
+func TestWriteRoutesRefuseBadNames(tester *testing.T) {
+	handler, sessionCookie := signedIn(tester, openAdminStore(tester, ""))
+	folder := envFolderWith(tester, handler, sessionCookie)
+	writeRoutes := []struct{ method, pathAfterName, body string }{
+		{http.MethodPatch, "/variables", editorBody(map[string]any{"baseVersion": "v", "changes": []map[string]any{{"key": "A", "value": "1"}}})},
+		{http.MethodPut, "/content", editorBody(map[string]any{"baseVersion": "v", "content": "A=1\n"})},
+		{http.MethodPost, "/history/20260925T080000.000000000Z_admin.env/restore", editorBody(map[string]any{"baseVersion": "v"})},
+		{http.MethodPut, "/apply-target", editorBody(map[string]any{"adapter": "doco-cd", "project": "shop-dev"})},
+		{http.MethodPost, "/apply", editorBody(map[string]any{"version": "v"})},
+	}
+	for _, badName := range []string{"..%2Fx.env", ".env", "a.txt", "%2Ftmp%2Fx.env"} {
+		for _, route := range writeRoutes {
+			target := "/api/env-files/" + badName + route.pathAfterName
+			if response := sendJSON(handler, route.method, target, route.body, sessionCookie); response.Code != http.StatusBadRequest {
+				tester.Errorf("%s %s: got %d %s", route.method, target, response.Code, response.Body.String())
+			}
+		}
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(folder), "x.env")); !errors.Is(err, os.ErrNotExist) {
+		tester.Fatal("a file was written outside the folder")
+	}
+	if entries, _ := os.ReadDir(folder); len(entries) != 1 {
+		tester.Fatalf("the folder now holds %v", entries)
+	}
 }
 
 // Env files hold production secrets: every route must refuse a visitor without a session.

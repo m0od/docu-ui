@@ -300,3 +300,26 @@ func TestSetupCodeCannotSignIn(tester *testing.T) {
 		tester.Fatalf("next code: %d %s", nextCode.Code, nextCode.Body.String())
 	}
 }
+
+// README: setup "closes for good". Choosing no sign-in, or turning sign-in off later, leaves no
+// account, yet the setup token (valid until restart) must not create one: that would lock the UI.
+func TestSetupStaysClosedWithoutSignIn(tester *testing.T) {
+	skippedAtSetup := openSignInOffStore(tester)
+	turnedOffLater := openAdminStore(tester, "")
+	adminHandler, sessionCookie := signedIn(tester, turnedOffLater)
+	if turnedOff := sendJSON(adminHandler, http.MethodPost, "/api/account/sign-in/disable", editorBody(map[string]any{"currentPassword": adminPassword}), sessionCookie); turnedOff.Code != http.StatusNoContent {
+		tester.Fatalf("turn off: %d %s", turnedOff.Code, turnedOff.Body.String())
+	}
+	for name, testStore := range map[string]*store.Store{"skipped at setup": skippedAtSetup, "turned off later": turnedOffLater} {
+		handler := newAuthServer(tester, Config{Store: testStore, SetupToken: testSetupToken})
+		if secret := sendJSON(handler, http.MethodGet, "/api/setup/totp-secret", ""); secret.Code != http.StatusConflict {
+			tester.Errorf("%s: totp secret %d", name, secret.Code)
+		}
+		if setup := postSetup(handler, "application/json", setupBody(nil)); setup.Code != http.StatusConflict {
+			tester.Errorf("%s: setup %d %s", name, setup.Code, setup.Body.String())
+		}
+		if signInOff, _ := testStore.SignInOff(context.Background()); !signInOff {
+			tester.Errorf("%s: sign-in is no longer off", name)
+		}
+	}
+}
