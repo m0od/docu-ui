@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -20,7 +21,7 @@ const (
 )
 
 // Recreating stops and starts containers and may pull images, so it can take minutes.
-const timeout = 5 * time.Minute
+var timeout = 5 * time.Minute
 
 // Compose errors come last, so a long message keeps its end.
 const messageLimit = 2 << 10
@@ -65,6 +66,12 @@ func splitList(labelValue string) []string {
 // run calls the docker CLI and returns its output, or an error carrying what it printed.
 func run(ctx context.Context, arguments ...string) (string, error) {
 	command := exec.CommandContext(ctx, "docker", arguments...)
+	// The Compose plugin runs as a child of the docker CLI and holds its output open: on timeout the
+	// whole group is killed, or the plugin would keep the request waiting and recreate later anyway.
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.Cancel = func() error { return syscall.Kill(-command.Process.Pid, syscall.SIGKILL) }
+	// A child that left the group cannot hold the request either.
+	command.WaitDelay = 10 * time.Second
 	var output, messages bytes.Buffer
 	command.Stdout, command.Stderr = &output, &messages
 	if err := command.Run(); err != nil {
