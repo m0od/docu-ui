@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -295,6 +296,70 @@ func TestWriteRefusesSymlinkOutOfTheFolder(tester *testing.T) {
 		if _, err := os.Stat(filepath.Join(folder, historyFolder)); !errors.Is(err, os.ErrNotExist) {
 			tester.Errorf("%s: a history entry was written for a refused save", linkName)
 		}
+	}
+}
+
+// README: the file is rewritten in place. A container that bind-mounts this single file keeps the
+// inode it saw at start; a temp file renamed over it would be a new inode the container never sees.
+func TestWriteKeepsTheSameFile(tester *testing.T) {
+	folder, version := editableFolder(tester, "A=1\n")
+	filePath := filepath.Join(folder, "api.env")
+	before, _ := os.Stat(filePath)
+	if _, err := WriteContent(folder, "api.env", version, "admin", "A=2\n"); err != nil {
+		tester.Fatal(err)
+	}
+	if after, _ := os.Stat(filePath); !os.SameFile(before, after) {
+		tester.Fatal("the save replaced the file instead of rewriting it")
+	}
+}
+
+// History entries hold every old value in clear: only Docu-UI's own user may read them, whatever
+// the host's umask lets other files have.
+func TestHistoryIsPrivate(tester *testing.T) {
+	previousUmask := syscall.Umask(0o022)
+	tester.Cleanup(func() { syscall.Umask(previousUmask) })
+	folder, version := editableFolder(tester, "A=1\n")
+	if _, err := WriteContent(folder, "api.env", version, "admin", "A=2\n"); err != nil {
+		tester.Fatal(err)
+	}
+	entries := historyEntries(tester, folder)
+	if len(entries) != 1 {
+		tester.Fatalf("got %d history entries", len(entries))
+	}
+	expectedModes := map[string]os.FileMode{
+		filepath.Join(folder, historyFolder):                               0o700,
+		filepath.Join(folder, historyFolder, "api.env"):                    0o700,
+		filepath.Join(folder, historyFolder, "api.env", entries[0].Name()): 0o600,
+	}
+	for historyPath, expectedMode := range expectedModes {
+		if info, _ := os.Stat(historyPath); info.Mode().Perm() != expectedMode {
+			tester.Errorf("%s: mode %v, want %v", historyPath, info.Mode().Perm(), expectedMode)
+		}
+	}
+}
+
+// The backup writes the old secrets, so .history gets the same folder boundary as the env files:
+// a .history symlink must not copy them to a writable place outside the mount.
+func TestHistoryRefusesSymlinkOutOfTheFolder(tester *testing.T) {
+	parent := tester.TempDir()
+	outsideFolder := filepath.Join(parent, "outside")
+	os.Mkdir(outsideFolder, 0o700)
+	folder := filepath.Join(parent, "env")
+	os.Mkdir(folder, 0o700)
+	writeFile(tester, filepath.Join(folder, "api.env"), "SECRET=old\n")
+	if err := os.Symlink(outsideFolder, filepath.Join(folder, historyFolder)); err != nil {
+		tester.Fatal(err)
+	}
+
+	_, err := WriteContent(folder, "api.env", contentVersion("SECRET=old\n"), "admin", "SECRET=new\n")
+	if err == nil || !strings.Contains(err.Error(), "history") {
+		tester.Fatalf("got %v", err)
+	}
+	if outsideEntries, _ := os.ReadDir(outsideFolder); len(outsideEntries) != 0 {
+		tester.Fatalf("written outside the folder: %v", outsideEntries)
+	}
+	if readBack(tester, folder) != "SECRET=old\n" {
+		tester.Fatal("file changed although the backup was refused")
 	}
 }
 
